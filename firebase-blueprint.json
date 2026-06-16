@@ -1,0 +1,51 @@
+{
+  "entities": {
+    "Sermon": {
+      "title": "Sermon",
+      "description": "Sermon entity",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "speaker": { "type": "string" },
+        "date": { "type": "string" },
+        "topic": { "type": "string" },
+        "scripture": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "audioUrl": { "type": "string" },
+        "sermonNotes": { "type": "string" },
+        "summary": { "type": "string" },
+        "discussionQuestions": { "type": "array", "items": { "type": "string" } },
+        "socialPosts": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "title", "speaker", "date", "topic", "scripture"]
+    },
+    "PrayerRequest": {
+      "title": "PrayerRequest",
+      "description": "PrayerRequest entity",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "requesterName": { "type": "string" },
+        "text": { "type": "string" },
+        "isPrivate": { "type": "boolean" },
+        "isAnonymous": { "type": "boolean" },
+        "date": { "type": "string" },
+        "isAnswered": { "type": "boolean" },
+        "pastorNote": { "type": "string" },
+        "prayedForCount": { "type": "number" }
+      },
+      "required": ["id", "requesterName", "text"]
+    }
+  },
+  "firestore": {
+    "/sermons/{sermonId}": {
+      "schema": "Sermon",
+      "description": "Collection of sermons"
+    },
+    "/prayerRequests/{requestId}": {
+      "schema": "PrayerRequest",
+      "description": "Collection of prayer requests"
+    }
+  }
+}

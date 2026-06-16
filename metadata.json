@@ -1,0 +1,6 @@
+{
+  "name": "Fonteyn Evangelical Church",
+  "description": "A modern, welcoming, digital home for Fonteyn Evangelical Church in Mbabane, Eswatini, featuring sermon libraries, event tracking, ministries, donations, and AI sermon/chat tools.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
