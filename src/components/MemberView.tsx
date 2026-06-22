@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { User, Mail, Phone, Calendar, Download, ShieldCheck, Sparkles, Megaphone, CheckCircle, FileText, Bookmark, BookOpen, Video, Users, Check, Search, Lock, EyeOff } from 'lucide-react';
+import { User, Mail, Phone, Calendar, Download, ShieldCheck, Sparkles, Megaphone, CheckCircle, FileText, Bookmark, BookOpen, Video, Users, Check, Search, Lock, EyeOff, ImageIcon, X, Loader2 } from 'lucide-react';
+import { useAppImages } from './ImageContext';
 
 const AVAILABLE_MINISTRIES = [
   "Youth Fellowship",
@@ -34,14 +35,17 @@ interface MemberViewProps {
 
 export default function MemberView({ language }: MemberViewProps) {
   const [profile, setProfile] = useState<any>(null);
+  const { uploadFile } = useAppImages();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'directory'>('dashboard');
   const [isEditing, setIsEditing] = useState(false);
 
   // Edit fields
   const [editPhone, setEditPhone] = useState('');
   const [editName, setEditName] = useState('');
+  const [editAvatar, setEditAvatar] = useState('');
   const [editMinistries, setEditMinistries] = useState<string[]>([]);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   // Exclusive Events State
   const [memberEvents, setMemberEvents] = useState(MEMBER_EVENTS);
@@ -58,6 +62,7 @@ export default function MemberView({ language }: MemberViewProps) {
       setProfile(data || {});
       setEditName(data?.name || '');
       setEditPhone(data?.phone || '');
+      setEditAvatar(data?.avatar || '');
       setEditMinistries(data?.ministries || []);
     } catch (err) {
       console.error('Error fetching member profile:', err);
@@ -70,6 +75,19 @@ export default function MemberView({ language }: MemberViewProps) {
     fetchProfile();
   }, []);
 
+  const handleAvatarUpload = async (file: File) => {
+    setIsUploadingAvatar(true);
+    try {
+      const url = await uploadFile(file);
+      if (url) setEditAvatar(url);
+    } catch(err) {
+      console.error("Avatar upload failed:", err);
+      alert("Failed to upload avatar image");
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
   const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile) return;
@@ -81,6 +99,7 @@ export default function MemberView({ language }: MemberViewProps) {
         body: JSON.stringify({
           name: editName,
           phone: editPhone,
+          avatar: editAvatar,
           ministries: editMinistries
         })
       });
@@ -263,6 +282,47 @@ export default function MemberView({ language }: MemberViewProps) {
                 <form onSubmit={handleProfileSave} className="space-y-4 text-left animate-fade-in" id="edit-profile-form">
                   <h4 className="font-header text-xs font-bold text-primary uppercase tracking-widest border-b pb-1">Edit Account Profiles</h4>
                   
+                  <div className="space-y-2">
+                    <label className="text-[9px] text-gray-500 font-bold uppercase block">Profile Avatar</label>
+                    {editAvatar && (
+                      <div className="relative w-20 h-20 rounded-full bg-gray-100 overflow-hidden group">
+                        <img src={editAvatar} alt="Avatar" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setEditAvatar('')}
+                          className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    )}
+                    <input 
+                      type="file" 
+                      accept="image/*"
+                      onChange={(e) => {
+                        if (e.target.files?.[0]) handleAvatarUpload(e.target.files[0]);
+                      }}
+                      className="hidden"
+                      id="upload-avatar"
+                    />
+                    <label 
+                      htmlFor="upload-avatar"
+                      className="flex items-center justify-center w-full px-4 py-2 bg-gray-50 border border-dashed border-gray-300 hover:border-secondary hover:bg-gray-100 rounded-xl cursor-pointer transition text-gray-500 font-medium text-xs"
+                    >
+                      {isUploadingAvatar ? (
+                        <span className="flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin text-secondary" />
+                          Uploading...
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2">
+                          <ImageIcon className="w-4 h-4" /> 
+                          {editAvatar ? 'Change Avatar' : 'Select Avatar Image'}
+                        </span>
+                      )}
+                    </label>
+                  </div>
+
                   <div className="space-y-1">
                     <label className="text-[9px] text-gray-500 font-bold uppercase block">Verification Name</label>
                     <input 

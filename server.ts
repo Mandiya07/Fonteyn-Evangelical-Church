@@ -1050,16 +1050,29 @@ app.delete('/api/users/:id', (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
-app.get('/api/profile', (req: Request, res: Response) => {
-  res.json(userProfile);
+app.get('/api/profile', async (req: Request, res: Response) => {
+  try {
+    const doc = await db.collection('users').doc('profile').get();
+    if (doc.exists) {
+      res.json(doc.data());
+    } else {
+      res.json(userProfile);
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.GET, 'users/profile');
+    res.status(500).json({ error: 'Failed to get profile' });
+  }
 });
 
-app.post('/api/profile', (req: Request, res: Response) => {
-  userProfile = {
-    ...userProfile,
-    ...req.body
-  };
-  res.json(userProfile);
+app.post('/api/profile', async (req: Request, res: Response) => {
+  try {
+    const docRef = db.collection('users').doc('profile');
+    await docRef.set(req.body, { merge: true });
+    res.json({ success: true, ...req.body });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, 'users/profile');
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
 });
 
 // Ministries endpoints
