@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import { INITIAL_MINISTRIES } from '../data';
+import React, { useState, useEffect } from 'react';
 import { Compass, Users, Clock, Mail, CheckCircle, Award, VolumeX, Image as ImageIcon, User } from 'lucide-react';
 import { Ministry } from '../types';
 
@@ -8,7 +7,20 @@ interface MinistriesViewProps {
 }
 
 export default function MinistriesView({ language }: MinistriesViewProps) {
-  const [selectedMin, setSelectedMin] = useState<Ministry | null>(INITIAL_MINISTRIES.length > 0 ? INITIAL_MINISTRIES[0] : null);
+  const [ministries, setMinistries] = useState<Ministry[]>([]);
+  const [selectedMin, setSelectedMin] = useState<Ministry | null>(null);
+  
+  useEffect(() => {
+    fetch('/api/ministries')
+      .then(res => res.json())
+      .then(data => {
+        setMinistries(data);
+        if (data && data.length > 0) {
+          setSelectedMin(data[0]);
+        }
+      })
+      .catch(err => console.error('Error fetching ministries:', err));
+  }, []);
   
   // Join Ministry form state
   const [joinName, setJoinName] = useState('');
@@ -45,7 +57,7 @@ export default function MinistriesView({ language }: MinistriesViewProps) {
 
         {/* MINISTRIES SELECTOR PILLS */}
         <div className="flex flex-wrap items-center justify-center gap-2 border-b pb-4 max-w-4xl mx-auto" id="ministries-horizontal-pills">
-          {INITIAL_MINISTRIES.map((m) => (
+          {ministries.map((m) => (
             <button
               key={m.id}
               onClick={() => setSelectedMin(m)}
