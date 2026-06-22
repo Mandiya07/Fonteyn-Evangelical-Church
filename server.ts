@@ -635,32 +635,53 @@ app.post('/api/images/update', async (req: Request, res: Response) => {
   res.json({ success: true, images: appImages });
 });
 
-app.post('/api/images/upload', (req: Request, res: Response) => {
+app.post('/api/images/upload', async (req: Request, res: Response) => {
   const { name, base64 } = req.body;
   if (!name || !base64) {
     return res.status(400).json({ error: 'Name and Base64 content are required.' });
   }
 
   try {
-    // Strip header if present (e.g. "data:image/png;base64,")
-    // More robust regex for various MIME types
-    const match = base64.match(/^data:[^;]+;base64,(.+)$/);
-    const rawBase64 = match ? match[1] : base64;
-    const buffer = Buffer.from(rawBase64, 'base64');
-    
-    // Create safe unique filename
+    // Create safe unique ID
     const sanitizedName = name.replace(/[^a-zA-Z0-9.\-_]/g, '');
-    const ext = path.extname(sanitizedName) || '.png';
-    const baseName = path.basename(sanitizedName, ext);
-    const finalFilename = `${baseName}_${Date.now()}${ext}`;
-    const filePath = path.join(uploadsDir, finalFilename);
+    const baseName = path.basename(sanitizedName, path.extname(sanitizedName)) || 'img';
+    const docId = `${baseName}_${Date.now()}`;
 
-    fs.writeFileSync(filePath, buffer);
-    const publicUrl = `/uploads/${finalFilename}`;
+    // Store in Firestore to persist across serverless deployments
+    await db.collection('assets').doc(docId).set({ base64, name: sanitizedName });
+    
+    const publicUrl = `/api/assets/${docId}`;
     res.json({ success: true, url: publicUrl });
   } catch (err: any) {
     console.error('File Upload Error:', err);
     res.status(500).json({ error: err.message || 'Failed to save uploaded file' });
+  }
+});
+
+app.get('/api/assets/:id', async (req: Request, res: Response) => {
+  try {
+    const doc = await db.collection('assets').doc(req.params.id).get();
+    if (doc.exists) {
+      const data = doc.data() as any;
+      const base64Str = data.base64;
+      
+      const match = base64Str.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        const contentType = match[1];
+        const rawBase64 = match[2];
+        const buffer = Buffer.from(rawBase64, 'base64');
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        res.send(buffer);
+      } else {
+        res.status(400).send('Invalid image format');
+      }
+    } else {
+      res.status(404).send('Not found');
+    }
+  } catch (err) {
+    console.error('File fetch error:', err);
+    res.status(500).send('Server Error');
   }
 });
 
