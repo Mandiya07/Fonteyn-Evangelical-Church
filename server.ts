@@ -1678,4 +1678,12 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+} else {
+  // On Vercel, run initializers asynchronously on startup
+  loadPersistentConfig().catch(console.error);
+  seedDatabaseIfEmpty().catch(console.error);
+}
+
+export default app;
