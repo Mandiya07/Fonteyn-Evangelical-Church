@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Shield, Compass, CheckCircle, CreditCard, Send, Printer, BookOpen, Video, Headphones, Download, Share2, FileText, MapPin, Clock, Quote, Sparkles, RefreshCw } from 'lucide-react';
 import { useAppImages } from './ImageContext';
+import DailyScripture from './DailyScripture';
 
 interface HomeViewProps {
   setCurrentTab: (tab: string) => void;
@@ -312,135 +313,141 @@ export default function HomeView({ setCurrentTab, language, onNewDonation, onNew
         </div>
       </section>
 
-      {/* 2.5 DAILY DEVOTIONAL SECTION */}
+      {/* 2.5 DAILY DEVOTIONAL & SCRIPTURE SECTION */}
       <section className="py-16 bg-gradient-to-b from-white to-supporting/40 border-b border-gray-100" id="daily-devotional-section">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-8">
             <span className="text-xs font-bold text-secondary tracking-widest uppercase font-header flex items-center justify-center gap-1">
               <Sparkles className="w-3.5 h-3.5 animate-pulse text-secondary" /> 
               {language === 'en' ? 'Daily Soul Nourishment' : 'Kudla Kwemoya Kwenkhosi'}
             </span>
             <h2 className="font-header text-3xl font-bold text-primary mt-2 tracking-tight">
-              {language === 'en' ? "Today's Devotional" : "Sifundvo Selanga Lamuhla"}
+              {language === 'en' ? "Daily Soul Nourishment" : "Kudla Kwemoya Kwenkhosi"}
             </h2>
-            <p className="text-xs sm:text-sm text-gray-500 mt-2 max-w-lg mx-auto leading-relaxed">
+            <p className="text-xs sm:text-sm text-gray-500 mt-2 max-w-2xl mx-auto leading-relaxed">
               {language === 'en' 
-                ? "Start your day centered on God's truth. Powered by Gemini AI to deliver fresh theological reflections on scripture."
-                : "Calisa lilanga lakho ngeliciniso laNkulunkulu. Isitfomulo selanga lesiletfwa bukhoma nge-Gemini AI."
+                ? "Start your day centered on God's truth. Powered by Gemini AI to deliver fresh scripture promises and theological reflections."
+                : "Calisa lilanga lakho ngeliciniso laNkulunkulu. Izithembiso letitsatfwe bukhoma nge-Gemini AI kute ukhule ekukholweni."
               }
             </p>
           </div>
 
-          <div className="bg-white rounded-3xl p-6 sm:p-10 shadow-lg border border-gray-150 relative overflow-hidden transition-all duration-300 hover:shadow-xl">
-            {/* Elegant Background Accents */}
-            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-secondary via-primary to-secondary"></div>
-            <div className="absolute -top-12 -right-12 w-32 h-32 bg-secondary/5 rounded-full blur-2xl pointer-events-none"></div>
-            <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-primary/5 rounded-full blur-2xl pointer-events-none"></div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start mt-8">
+            {/* Column 1: Today's Devotional */}
+            <div className="bg-white rounded-3xl p-6 sm:p-10 shadow-lg border border-gray-150 relative overflow-hidden transition-all duration-300 hover:shadow-xl">
+              {/* Elegant Background Accents */}
+              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-secondary via-primary to-secondary"></div>
+              <div className="absolute -top-12 -right-12 w-32 h-32 bg-secondary/5 rounded-full blur-2xl pointer-events-none"></div>
+              <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-primary/5 rounded-full blur-2xl pointer-events-none"></div>
 
-            {isLoadingDevotional ? (
-              <div className="py-16 flex flex-col items-center justify-center space-y-4">
-                <RefreshCw className="w-8 h-8 text-secondary animate-spin" />
-                <p className="text-xs text-gray-500 font-medium font-sans animate-pulse">
-                  {language === 'en' ? "Feasting on the Word... Please wait" : "Lilunda nelivi lamuhla... Sicela ume kancane"}
-                </p>
-              </div>
-            ) : devotionalError ? (
-              <div className="py-12 text-center space-y-4">
-                <p className="text-sm text-red-600 font-medium">{devotionalError}</p>
-                <button
-                  onClick={() => fetchDevotional(true)}
-                  className="px-5 py-2.5 bg-primary text-secondary text-xs font-bold font-header uppercase rounded-xl hover:bg-neutral-800 transition"
-                >
-                  {language === 'en' ? 'Retry Loading' : 'Etama Kabusha'}
-                </button>
-              </div>
-            ) : devotional ? (
-              <div className="space-y-8 animate-fade-in">
-                {/* Header info */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-100 pb-5">
-                  <div className="space-y-1">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-secondary/15 text-secondary border border-secondary/25 uppercase tracking-wider">
-                      {language === 'en' ? 'Abide Daily' : 'Hlala Kuye'}
-                    </span>
-                    <h3 className="font-header text-2xl font-bold text-primary tracking-tight leading-tight">
-                      {devotional.title}
-                    </h3>
-                  </div>
-                  <div className="text-left sm:text-right shrink-0">
-                    <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest font-mono">
-                      {new Date(devotional.date || new Date()).toLocaleDateString(language === 'en' ? 'en-US' : 'ss-SZ', { 
-                        weekday: 'long', 
-                        year: 'numeric', 
-                        month: 'long', 
-                        day: 'numeric' 
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Scripture Reference & Text */}
-                <div className="bg-amber-50/50 rounded-2xl p-5 sm:p-6 border border-amber-100/70 relative">
-                  <Quote className="absolute top-4 right-4 w-10 h-10 text-amber-200/40 pointer-events-none" />
-                  <div className="flex items-center space-x-2 text-secondary mb-2.5">
-                    <BookOpen className="w-4 h-4 shrink-0" />
-                    <span className="font-header font-bold text-xs uppercase tracking-wider">{devotional.scripture}</span>
-                  </div>
-                  <p className="font-sans font-medium italic text-gray-800 text-xs sm:text-sm leading-relaxed">
-                    "{devotional.scriptureText}"
+              {isLoadingDevotional ? (
+                <div className="py-16 flex flex-col items-center justify-center space-y-4">
+                  <RefreshCw className="w-8 h-8 text-secondary animate-spin" />
+                  <p className="text-xs text-gray-500 font-medium font-sans animate-pulse">
+                    {language === 'en' ? "Feasting on the Word... Please wait" : "Lilunda nelivi lamuhla... Sicela ume kancane"}
                   </p>
                 </div>
-
-                {/* Pastor Reflection / Commentary */}
-                <div className="space-y-4">
-                  <h4 className="text-[10px] font-bold text-secondary tracking-widest uppercase font-header">
-                    {language === 'en' ? "Pastoral Reflection" : "Sifundvo Selikhonzi"}
-                  </h4>
-                  <div className="text-gray-700 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-sans font-normal text-gray-600">
-                    {devotional.thought}
-                  </div>
-                </div>
-
-                {/* Prayer section */}
-                <div className="border-l-4 border-secondary/60 bg-gray-50/50 rounded-r-2xl p-5 space-y-2">
-                  <h4 className="text-[10px] font-bold text-gray-500 tracking-widest uppercase font-header">
-                    {language === 'en' ? "Daily Prayer" : "Mthandazo Selanga"}
-                  </h4>
-                  <p className="font-sans font-medium italic text-gray-800 text-xs sm:text-sm leading-relaxed">
-                    "{devotional.prayer}"
-                  </p>
-                </div>
-
-                {/* Reflection/Application Question */}
-                <div className="p-5 bg-primary/[0.02] border border-primary/5 rounded-2xl space-y-2">
-                  <h4 className="text-[10px] font-bold text-primary tracking-widest uppercase font-header flex items-center gap-1.5">
-                    <Compass className="w-3.5 h-3.5 text-secondary" />
-                    {language === 'en' ? "For Your Reflection" : "Kuzindla Nekuhlola"}
-                  </h4>
-                  <p className="text-gray-800 font-sans text-xs sm:text-sm font-semibold">
-                    {devotional.reflectionQuestion}
-                  </p>
-                </div>
-
-                {/* Refresh/Regenerate trigger */}
-                <div className="flex justify-between items-center pt-4 border-t border-gray-100 text-[11px] text-gray-400">
-                  <span>
-                    {devotional.isFallback 
-                      ? (language === 'en' ? "Offline mode active" : "Imodi ye-Offline ivuliwe") 
-                      : (language === 'en' ? "Freshly generated daily bread" : "Inshumayelo letsatfwe bukhoma")
-                    }
-                  </span>
+              ) : devotionalError ? (
+                <div className="py-12 text-center space-y-4">
+                  <p className="text-sm text-red-600 font-medium">{devotionalError}</p>
                   <button
                     onClick={() => fetchDevotional(true)}
-                    disabled={isLoadingDevotional}
-                    className="inline-flex items-center space-x-1.5 font-bold text-primary hover:text-secondary group transition cursor-pointer"
-                    title={language === 'en' ? "Seek another word from God" : "Kufuna lelinye lilwi kuNkulunkulu"}
+                    className="px-5 py-2.5 bg-primary text-secondary text-xs font-bold font-header uppercase rounded-xl hover:bg-neutral-800 transition"
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 text-primary group-hover:text-secondary ${isLoadingDevotional ? 'animate-spin' : 'group-hover:rotate-45'} transition duration-300`} />
-                    <span>{language === 'en' ? "Seek Fresh Devotional" : "Funa Lelilinye Sifundvo"}</span>
+                    {language === 'en' ? 'Retry Loading' : 'Etama Kabusha'}
                   </button>
                 </div>
-              </div>
-            ) : null}
+              ) : devotional ? (
+                <div className="space-y-8 animate-fade-in">
+                  {/* Header info */}
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-100 pb-5">
+                    <div className="space-y-1">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-secondary/15 text-secondary border border-secondary/25 uppercase tracking-wider">
+                        {language === 'en' ? 'Abide Daily' : 'Hlala Kuye'}
+                      </span>
+                      <h3 className="font-header text-xl sm:text-2xl font-bold text-primary tracking-tight leading-tight">
+                        {devotional.title}
+                      </h3>
+                    </div>
+                    <div className="text-left sm:text-right shrink-0">
+                      <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest font-mono">
+                        {new Date(devotional.date || new Date()).toLocaleDateString(language === 'en' ? 'en-US' : 'ss-SZ', { 
+                          weekday: 'long', 
+                          year: 'numeric', 
+                          month: 'long', 
+                          day: 'numeric' 
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Scripture Reference & Text */}
+                  <div className="bg-amber-50/50 rounded-2xl p-5 sm:p-6 border border-amber-100/70 relative">
+                    <Quote className="absolute top-4 right-4 w-10 h-10 text-amber-200/40 pointer-events-none" />
+                    <div className="flex items-center space-x-2 text-secondary mb-2.5">
+                      <BookOpen className="w-4 h-4 shrink-0" />
+                      <span className="font-header font-bold text-xs uppercase tracking-wider">{devotional.scripture}</span>
+                    </div>
+                    <p className="font-sans font-medium italic text-gray-800 text-xs sm:text-sm leading-relaxed">
+                      "{devotional.scriptureText}"
+                    </p>
+                  </div>
+
+                  {/* Pastor Reflection / Commentary */}
+                  <div className="space-y-4">
+                    <h4 className="text-[10px] font-bold text-secondary tracking-widest uppercase font-header">
+                      {language === 'en' ? "Pastoral Reflection" : "Sifundvo Selikhonzi"}
+                    </h4>
+                    <div className="text-gray-700 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-sans font-normal text-gray-600">
+                      {devotional.thought}
+                    </div>
+                  </div>
+
+                  {/* Prayer section */}
+                  <div className="border-l-4 border-secondary/60 bg-gray-50/50 rounded-r-2xl p-5 space-y-2">
+                    <h4 className="text-[10px] font-bold text-gray-500 tracking-widest uppercase font-header">
+                      {language === 'en' ? "Daily Prayer" : "Mthandazo Selanga"}
+                    </h4>
+                    <p className="font-sans font-medium italic text-gray-800 text-xs sm:text-sm leading-relaxed">
+                      "{devotional.prayer}"
+                    </p>
+                  </div>
+
+                  {/* Reflection/Application Question */}
+                  <div className="p-5 bg-primary/[0.02] border border-primary/5 rounded-2xl space-y-2">
+                    <h4 className="text-[10px] font-bold text-primary tracking-widest uppercase font-header flex items-center gap-1.5">
+                      <Compass className="w-3.5 h-3.5 text-secondary" />
+                      {language === 'en' ? "For Your Reflection" : "Kuzindla Nekuhlola"}
+                    </h4>
+                    <p className="text-gray-800 font-sans text-xs sm:text-sm font-semibold">
+                      {devotional.reflectionQuestion}
+                    </p>
+                  </div>
+
+                  {/* Refresh/Regenerate trigger */}
+                  <div className="flex justify-between items-center pt-4 border-t border-gray-100 text-[11px] text-gray-400">
+                    <span>
+                      {devotional.isFallback 
+                        ? (language === 'en' ? "Offline mode active" : "Imodi ye-Offline ivuliwe") 
+                        : (language === 'en' ? "Freshly generated daily bread" : "Inshumayelo letsatfwe bukhoma")
+                      }
+                    </span>
+                    <button
+                      onClick={() => fetchDevotional(true)}
+                      disabled={isLoadingDevotional}
+                      className="inline-flex items-center space-x-1.5 font-bold text-primary hover:text-secondary group transition cursor-pointer"
+                      title={language === 'en' ? "Seek another word from God" : "Kufuna lelinye lilwi kuNkulunkulu"}
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 text-primary group-hover:text-secondary ${isLoadingDevotional ? 'animate-spin' : 'group-hover:rotate-45'} transition duration-300`} />
+                      <span>{language === 'en' ? "Seek Fresh Devotional" : "Funa Lelilinye Sifundvo"}</span>
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Column 2: Today's Daily Scripture */}
+            <DailyScripture language={language} />
           </div>
         </div>
       </section>

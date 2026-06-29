@@ -1478,6 +1478,99 @@ The response MUST be a single structured JSON object.`;
   }
 });
 
+app.get('/api/ai/daily-scripture', async (req: Request, res: Response) => {
+  const lang = (req.query.lang as string) || 'en';
+  const forceRefresh = req.query.refresh === 'true';
+  const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const docId = `scripture_${lang}_${todayStr}`;
+
+  try {
+    // 1. Try reading from cache in Firestore if not forced refresh
+    if (!forceRefresh) {
+      try {
+        const cachedDoc = await db.collection('daily_scriptures').doc(docId).get();
+        if (cachedDoc.exists) {
+          return res.json(cachedDoc.data());
+        }
+      } catch (cacheErr) {
+        console.warn('Error reading cached scripture, proceeding with generation:', cacheErr);
+      }
+    }
+
+    // 2. Generate with Gemini
+    const ai = getGeminiClient();
+    const systemPrompt = `You are a devout, warm, and highly encouraging pastor for Fonteyn Evangelical Church in Mbabane, Eswatini. 
+Generate a beautiful daily bible scripture verse and an uplifting, concise message of 2-3 sentences that applies the scripture's truth to daily life in a heart-warming way.
+The response MUST be a single structured JSON object containing 'verse', 'text', and 'message'.`;
+
+    const userPrompt = lang === 'swati' 
+      ? `Generate an encouraging daily scripture in Siswati (the native language of Eswatini). It must contain:
+- 'verse': a relevant bible verse reference in Siswati (e.g., 'Johane 3:16' or 'Tiphrofetho 3:5')
+- 'text': the actual bible verse text in Siswati
+- 'message': a short, uplifting message of 2-3 sentences in Siswati applying this scripture's truth to encourage believers today.`
+      : `Generate an encouraging daily scripture in English. It must contain:
+- 'verse': a relevant bible verse reference (e.g., 'John 3:16' or 'Proverbs 3:5')
+- 'text': the actual bible verse text in English
+- 'message': a short, uplifting message of 2-3 sentences in English applying this scripture's truth to encourage believers today.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.5-flash',
+      contents: userPrompt,
+      config: {
+        systemInstruction: systemPrompt,
+        temperature: 0.9,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            verse: { type: Type.STRING },
+            text: { type: Type.STRING },
+            message: { type: Type.STRING },
+          },
+          required: ["verse", "text", "message"],
+        }
+      }
+    });
+
+    const scriptureData = JSON.parse(response.text.trim());
+    scriptureData.date = todayStr;
+    scriptureData.lang = lang;
+
+    // 3. Cache the generated scripture
+    try {
+      await db.collection('daily_scriptures').doc(docId).set(scriptureData);
+    } catch (saveErr) {
+      console.warn('Failed to save scripture to Firestore cache:', saveErr);
+    }
+
+    return res.json(scriptureData);
+
+  } catch (err: any) {
+    console.error('Error generating daily scripture:', err);
+
+    // Fallbacks
+    const fallbackEnglish = {
+      verse: "Philippians 4:13",
+      text: "I can do all things through Christ who strengthens me.",
+      message: "No matter what challenges you face today, remember that you are never alone. Christ is your ultimate source of strength, guiding your steps and giving you the courage to overcome every obstacle.",
+      date: todayStr,
+      lang: 'en',
+      isFallback: true
+    };
+
+    const fallbackSwati = {
+      verse: "KubaseFilipi 4:13",
+      text: "Nginemandla ekwenza tonkhe tintfo ngaKhristu longipha emandla.",
+      message: "Noma ngabe ngutiphi tinkinga lobhekana nato namuhla, khumbula kutsi awuwedwa. Khristu ungumtfombo wakho wemandla, uhola tinyatselo takho futsi ukupha sibindi sekveta tonkhe tinkinga.",
+      date: todayStr,
+      lang: 'swati',
+      isFallback: true
+    };
+
+    return res.json(lang === 'swati' ? fallbackSwati : fallbackEnglish);
+  }
+});
+
 // ==========================================
 // V2 EXPANSION ARCHITECTURE SCHEMATICS
 // ==========================================
