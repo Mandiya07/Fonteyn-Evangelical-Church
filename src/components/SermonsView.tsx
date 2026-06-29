@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Play, Pause, Search, Filter, Book, FileText, Sparkles, Download, Share2, Printer, CheckCircle, RotateCw, RefreshCw, AudioLines, Video } from 'lucide-react';
 import { Sermon } from '../types';
 
@@ -17,11 +17,12 @@ export default function SermonsView({ language }: SermonsViewProps) {
   // Notes drawer state
   const [viewNotesSermon, setViewNotesSermon] = useState<Sermon | null>(null);
 
-  // Audio player mock state
+  // Audio player state
+  const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playerSermon, setPlayerSermon] = useState<Sermon | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(1320); // 22 minutes simulation
+  const [duration, setDuration] = useState(0);
 
   // AI Sermon Assistant state
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
@@ -72,31 +73,56 @@ export default function SermonsView({ language }: SermonsViewProps) {
 
   // Start playing audio
   const handlePlayAudio = (sermon: Sermon) => {
-    setPlayerSermon(sermon);
-    setIsPlaying(true);
+    const isSameSermon = playerSermon && playerSermon.id === sermon.id;
+    
+    if (isSameSermon) {
+      togglePlayPause();
+    } else {
+      setPlayerSermon(sermon);
+      setCurrentTime(0);
+      setIsPlaying(true);
+      // Playback triggered in useEffect
+    }
+  };
+
+  const togglePlayPause = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play().catch(e => console.error("Playback failed", e));
+      setIsPlaying(true);
+    }
+  };
+
+  useEffect(() => {
+    if (audioRef.current && playerSermon?.audioUrl && isPlaying) {
+      audioRef.current.play().catch(e => console.error("Playback failed", e));
+    }
+  }, [playerSermon]);
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current) {
+      setDuration(audioRef.current.duration);
+    }
+  };
+
+  const handleAudioEnded = () => {
+    setIsPlaying(false);
     setCurrentTime(0);
   };
 
-  // Audio simulation timer
-  useEffect(() => {
-    let timer: any;
-    if (isPlaying) {
-      timer = setInterval(() => {
-        setCurrentTime(prev => {
-          if (prev >= duration) {
-            setIsPlaying(false);
-            return 0;
-          }
-          return prev + 1;
-        });
-      }, 1000);
-    }
-    return () => clearInterval(timer);
-  }, [isPlaying]);
-
   const formatTime = (secs: number) => {
+    if (!secs || isNaN(secs)) return "0:00";
     const mins = Math.floor(secs / 60);
-    const remainingSecs = secs % 60;
+    const remainingSecs = Math.floor(secs % 60);
     return `${mins}:${remainingSecs < 10 ? '0' : ''}${remainingSecs}`;
   };
 
@@ -244,24 +270,48 @@ export default function SermonsView({ language }: SermonsViewProps) {
 
             {/* Simulating active tracks */}
             <div className="w-full md:flex-1 max-w-sm flex items-center space-x-3 text-xs" id="player-timeline-hud">
-              <span className="text-gray-400 text-[11px] shrink-0">{formatTime(currentTime)}</span>
-              <div className="relative flex-1 h-1.5 bg-neutral-850 rounded-full overflow-hidden">
-                <div 
-                  className="absolute top-0 left-0 bottom-0 bg-secondary" 
-                  style={{ width: `${(currentTime / duration) * 105}%` }}
-                />
-              </div>
-              <span className="text-gray-400 text-[11px] shrink-0">{formatTime(duration)}</span>
+              <span className="text-gray-400 text-[11px] shrink-0 font-mono">{formatTime(currentTime)}</span>
+              <input
+                type="range"
+                min="0"
+                max={duration || 0}
+                value={currentTime}
+                onChange={(e) => {
+                  const time = Number(e.target.value);
+                  setCurrentTime(time);
+                  if (audioRef.current) {
+                    audioRef.current.currentTime = time;
+                  }
+                }}
+                className="flex-1 h-1.5 bg-neutral-850 rounded-full appearance-none cursor-pointer accent-secondary"
+              />
+              <span className="text-gray-400 text-[11px] shrink-0 font-mono">{formatTime(duration)}</span>
             </div>
 
             <div className="flex items-center space-x-3 shrink-0 w-full md:w-auto justify-end">
-              <button
-                onClick={() => setIsPlaying(!isPlaying)}
-                className="w-11 h-11 bg-secondary text-primary font-bold rounded-full flex items-center justify-center hover:bg-white hover:scale-105 transition shadow-md shrink-0 cursor-pointer"
-                title={isPlaying ? "Pause" : "Play"}
-              >
-                {isPlaying ? <Pause className="w-5 h-5 text-primary" /> : <Play className="w-5 h-5 text-primary fill-primary ml-0.5" />}
-              </button>
+              {playerSermon.audioUrl && (
+                <audio
+                  ref={audioRef}
+                  src={playerSermon.audioUrl}
+                  onTimeUpdate={handleTimeUpdate}
+                  onLoadedMetadata={handleLoadedMetadata}
+                  onEnded={handleAudioEnded}
+                  className="hidden"
+                />
+              )}
+              {playerSermon.audioUrl ? (
+                <button
+                  onClick={togglePlayPause}
+                  className="w-11 h-11 bg-secondary text-primary font-bold rounded-full flex items-center justify-center hover:bg-white hover:scale-105 transition shadow-md shrink-0 cursor-pointer"
+                  title={isPlaying ? "Pause" : "Play"}
+                >
+                  {isPlaying ? <Pause className="w-5 h-5 text-primary" /> : <Play className="w-5 h-5 text-primary fill-primary ml-0.5" />}
+                </button>
+              ) : (
+                <div className="text-xs text-secondary font-mono bg-secondary/10 px-3 py-2 rounded-xl">
+                  No Audio Available
+                </div>
+              )}
             </div>
           </div>
         )}

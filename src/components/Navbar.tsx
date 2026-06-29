@@ -238,7 +238,7 @@ export default function Navbar({ currentTab, setCurrentTab, language, setLanguag
 
       {/* Mobile Menu Panel */}
       {isOpen && (
-        <div className="lg:hidden bg-primary border-t border-white/10 animate-fade-in" id="mobile-menu-pane">
+        <div className="lg:hidden bg-primary border-t border-white/10 animate-fade-in max-h-[calc(100vh-80px)] overflow-y-auto" id="mobile-menu-pane">
           <div className="px-2 pt-3 pb-4 space-y-1 sm:px-3">
             {navItems.map((item) => (
               <button

@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import { initializeApp as initClientApp } from 'firebase/app';
 import { 
@@ -620,7 +620,15 @@ const saveImageConfig = async () => {
 };
 
 // Images API Endpoints
-app.get('/api/images', (req: Request, res: Response) => {
+app.get('/api/images', async (req: Request, res: Response) => {
+  try {
+    const doc = await db.collection('settings').doc('app-images').get();
+    if (doc.exists) {
+      appImages = { ...appImages, ...doc.data() };
+    }
+  } catch (err) {
+    console.error("Failed to fetch fresh images from Firestore:", err);
+  }
   res.json(appImages);
 });
 
@@ -1359,6 +1367,114 @@ app.post('/api/ai/translate', async (req: Request, res: Response) => {
       translatedText: matched,
       isDemoFallback: true 
     });
+  }
+});
+
+app.get('/api/ai/devotional', async (req: Request, res: Response) => {
+  const lang = (req.query.lang as string) || 'en';
+  const forceRefresh = req.query.refresh === 'true';
+  const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const docId = `devotional_${lang}_${todayStr}`;
+
+  try {
+    // 1. Try reading from cache in Firestore if not forced refresh
+    if (!forceRefresh) {
+      try {
+        const cachedDoc = await db.collection('devotionals').doc(docId).get();
+        if (cachedDoc.exists) {
+          return res.json(cachedDoc.data());
+        }
+      } catch (cacheErr) {
+        console.warn('Error reading cached devotional, proceeding with generation:', cacheErr);
+      }
+    }
+
+    // 2. Generate with Gemini
+    const ai = getGeminiClient();
+    const systemPrompt = `You are a devout, inspiring, and highly encouraging pastor for Fonteyn Evangelical Church in Mbabane, Eswatini. 
+Generate a beautiful, rich daily devotional for today.
+The response MUST be a single structured JSON object.`;
+
+    const userPrompt = lang === 'swati' 
+      ? `Generate a beautiful daily devotional in Siswati (the native language of Eswatini). It should contain:
+- an inspiring title (Siswati)
+- a relevant bible verse reference (e.g. 'Johane 15:5')
+- the actual bible verse text (Siswati)
+- a short heart-warming theological reflection / commentary (about 150-200 words in Siswati, filled with faith, hope, and love, with practical application to daily life)
+- a short closing prayer of 1-2 sentences (Siswati)
+- a daily reflection/application question (Siswati)`
+      : `Generate a beautiful daily devotional in English. It should contain:
+- an inspiring title
+- a relevant bible verse reference (e.g. 'John 15:5')
+- the actual bible verse text
+- a short heart-warming theological reflection / commentary (about 150-200 words in English, filled with faith, hope, and love, with practical application to daily life)
+- a short closing prayer of 1-2 sentences
+- a daily reflection/application question`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.5-flash',
+      contents: userPrompt,
+      config: {
+        systemInstruction: systemPrompt,
+        temperature: 0.85,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            scripture: { type: Type.STRING },
+            scriptureText: { type: Type.STRING },
+            thought: { type: Type.STRING },
+            prayer: { type: Type.STRING },
+            reflectionQuestion: { type: Type.STRING },
+          },
+          required: ["title", "scripture", "scriptureText", "thought", "prayer", "reflectionQuestion"],
+        }
+      }
+    });
+
+    const devData = JSON.parse(response.text.trim());
+    devData.date = todayStr;
+    devData.lang = lang;
+
+    // 3. Cache the generated devotional
+    try {
+      await db.collection('devotionals').doc(docId).set(devData);
+    } catch (saveErr) {
+      console.warn('Failed to save devotional to Firestore cache:', saveErr);
+    }
+
+    return res.json(devData);
+
+  } catch (err: any) {
+    console.error('Error generating daily devotional:', err);
+
+    // Fallbacks
+    const fallbackEnglish = {
+      title: "Abiding in His Love",
+      scripture: "John 15:5",
+      scriptureText: "I am the vine, you are the branches. He who abides in Me, and I in him, bears much fruit; for without Me you can do nothing.",
+      thought: "In the fast-paced rhythm of our daily lives, it is so easy to drift into self-reliance. We strive, we plan, and we exhaust ourselves, forgetting that our true strength and spiritual vitality come solely from our connection to Jesus Christ. Just as a branch cannot bear fruit by itself, we cannot live a fruitful, peace-filled life apart from Him. Abiding is not a call to passive laziness, but an active resting, a conscious turning of our minds and hearts to the Lord in prayer, worship, and obedience throughout our day. Today, let us take a moment to pause, breathe, and consciously align our steps with the Vine, knowing that in Him, our lives will bear lasting fruit.",
+      prayer: "Lord Jesus, help me to abide in You today. Forgive me for the times I try to carry my burdens alone, and teach me to rest in Your strength and love. Amen.",
+      reflectionQuestion: "What is one area of your life today where you need to stop self-striving and instead trust in the Lord's strength?",
+      date: todayStr,
+      lang: 'en',
+      isFallback: true
+    };
+
+    const fallbackSwati = {
+      title: "Kuhlala Oliveni Lweliciniso",
+      scripture: "Johane 15:5",
+      scriptureText: "Ngingulofosela welivini, nina nitigaba. Lowo lohlala kumbe, nami ngihlale kuye, utsela titselo letinyenti; ngobe ngaphandle kwami ngeke nente lutfo.",
+      thought: "Ekuphileni kwetfu kwamalanga onkhe, kulula kakhulu kutsi tetsembe tsine. Siyesuka ekutseni sitsembe Nkulunkulu, sibe matasa ngekuhlela nangekutikhokhobisa ngemandla etfu. Kodvwa Livi laNkulunkulu lisikhumbuta kutsi emandla etfu emoya nempilo yetfu ivela kuphela ngekuhlala kuJesu Khristu. Njengobe ligatja lingeke litsela titselo lodvwa, natsi ngeke sibe nekuphila lokunokuthula netitselo letinhle ngaphandle kwakhe. Kuhlala Kuye kusho kuthantaza, kumlalela, kanye nekuhamba naYe onkhe malanga. Lamuhla, asime kancane, sitsatse umoya, simeme Jesu kutsi abe sisekelo sako konkhe lesikwentako.",
+      prayer: "Nkhosi Jesu, ngisite ngihlale kuWe lamuhla. Ngitsetselele lapho ngitsemba khona emandla ami, ungifundzise kuncika kuWe. Amen.",
+      reflectionQuestion: "Ngukuphi luhlangotsi lwekuphila kwakho lamuhla lapho ubona khona kutsi ube wetsemba emandla akho kunekwetsemba Nkhosi?",
+      date: todayStr,
+      lang: 'swati',
+      isFallback: true
+    };
+
+    return res.json(lang === 'swati' ? fallbackSwati : fallbackEnglish);
   }
 });
 
