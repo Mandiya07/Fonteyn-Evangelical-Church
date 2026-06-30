@@ -97,6 +97,8 @@ export function ImageProvider({ children }: { children: React.ReactNode }) {
             const data = await res.json();
             resolve(data.url);
           } else {
+            const errorData = await res.json().catch(() => ({}));
+            console.error('Upload API failure:', errorData);
             resolve(null);
           }
         } catch (err) {

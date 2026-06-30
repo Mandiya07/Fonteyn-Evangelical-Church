@@ -611,11 +611,11 @@ const saveImageConfig = async () => {
     }
   }
 
-  // 2. Update Local File (as extra persistence or debug info)
+  // 2. Update Firestore (Primary persistence)
   try {
-    fs.writeFileSync(configFilePath, JSON.stringify(appImages, null, 2), 'utf-8');
+    await db.collection('settings').doc('app-images').set(appImages);
   } catch (err) {
-    console.error("Failed to write image-config.json:", err);
+    console.error("Failed to write image-config.json to Firestore:", err);
   }
 };
 
