@@ -18,7 +18,7 @@ const BLOG_POSTS = [
     category: 'Pastor\'s Articles',
     tags: ['Faith', 'Growth', 'Seasons'],
     comments: 12,
-    image: 'https://images.unsplash.com/photo-1544465544-1b71aee9dfa3?w=600&auto=format&fit=crop&q=80&fit=crop'
+    image: ''
   },
   {
     id: '2',
@@ -30,7 +30,7 @@ const BLOG_POSTS = [
     category: 'Ministry Updates',
     tags: ['Youth', 'Music', 'Celebration'],
     comments: 5,
-    image: 'https://images.unsplash.com/photo-1514320291840-2bc89897d387?w=600&auto=format&fit=crop&q=80&fit=crop'
+    image: ''
   },
   {
     id: '3',
@@ -42,7 +42,7 @@ const BLOG_POSTS = [
     category: 'Announcements',
     tags: ['Events', 'Thanksgiving'],
     comments: 0,
-    image: 'https://images.unsplash.com/photo-1438283173091-5dbf5c5a3206?w=600&auto=format&fit=crop&q=80&fit=crop'
+    image: ''
   },
   {
     id: '4',
@@ -54,7 +54,7 @@ const BLOG_POSTS = [
     category: 'Testimonies',
     tags: ['Healing', 'Grace', 'Testimony'],
     comments: 24,
-    image: 'https://images.unsplash.com/photo-1523824922870-a6201560e4eb?w=600&auto=format&fit=crop&q=80&fit=crop'
+    image: ''
   },
   {
     id: '5',
@@ -66,7 +66,7 @@ const BLOG_POSTS = [
     category: 'Community News',
     tags: ['Outreach', 'Community', 'Giving'],
     comments: 8,
-    image: 'https://images.unsplash.com/photo-1593113580332-6ace6178c187?w=600&auto=format&fit=crop&q=80&fit=crop'
+    image: ''
   }
 ];
 

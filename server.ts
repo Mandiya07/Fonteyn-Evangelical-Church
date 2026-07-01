@@ -4,30 +4,24 @@ import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
-import { initializeApp as initClientApp } from 'firebase/app';
+import { initializeApp } from 'firebase/app';
 import { 
-  getFirestore as getClientFirestore, 
-  collection as clientCollection, 
-  doc as clientDoc,
-  getDoc as clientGetDoc,
-  getDocs as clientGetDocs,
-  addDoc as clientAddDoc,
-  setDoc as clientSetDoc,
-  deleteDoc as clientDeleteDoc,
-  updateDoc as clientUpdateDoc,
-  query as clientQuery,
-  orderBy as clientOrderBy,
-  limit as clientLimit,
+  getFirestore, 
+  collection, 
+  doc, 
+  getDoc, 
+  getDocs, 
+  addDoc, 
+  setDoc, 
+  updateDoc, 
+  deleteDoc, 
+  query, 
+  orderBy, 
+  limit,
   QueryConstraint
 } from 'firebase/firestore';
-import {
-  INITIAL_SERMONS,
-  INITIAL_EVENTS,
-  INITIAL_BLOG_POSTS,
-  INITIAL_USER_PROFILE
-} from './src/data';
 
-dotenv.config();
+console.log('Starting server...');
 
 // Handle Firebase configuration from config file if exists
 let firebaseConfig: any = null;
@@ -35,48 +29,52 @@ const firebaseConfigPath = path.join(process.cwd(), 'firebase-applet-config.json
 if (fs.existsSync(firebaseConfigPath)) {
   try {
     firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, 'utf-8'));
+    console.log('Firebase config loaded:', firebaseConfig.projectId);
   } catch (err) {
     console.error('Failed to parse firebase-applet-config.json:', err);
   }
 }
 
-// Initialize Firebase Client
-if (!firebaseConfig?.projectId) {
-  console.error('CRITICAL: Firebase Project ID is missing from configuration.');
-}
+// Initialize Client Firebase App
+const firebaseApp = firebaseConfig?.apiKey ? initializeApp({
+  apiKey: firebaseConfig.apiKey,
+  authDomain: firebaseConfig.authDomain,
+  projectId: firebaseConfig.projectId,
+  storageBucket: firebaseConfig.storageBucket,
+  messagingSenderId: firebaseConfig.messagingSenderId,
+  appId: firebaseConfig.appId,
+}) : null;
 
-const clientApp = initClientApp(firebaseConfig);
-const firestoreDatabaseId = (firebaseConfig?.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)') 
-  ? firebaseConfig.firestoreDatabaseId 
-  : undefined;
+const clientDb = firebaseApp
+  ? (firebaseConfig.firestoreDatabaseId 
+     ? getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId)
+     : getFirestore(firebaseApp))
+  : null;
 
-const clientDb = getClientFirestore(clientApp, firestoreDatabaseId);
+console.log('Firebase Client SDK initialized:', !!clientDb);
 
 const db = {
   collection(collectionName: string) {
-    class CompatQuery {
-      private constraints: QueryConstraint[] = [];
-      private colRef = clientCollection(clientDb, collectionName);
-
+    let constraints: QueryConstraint[] = [];
+    
+    return {
       orderBy(field: string, direction: 'asc' | 'desc' = 'asc') {
-        this.constraints.push(clientOrderBy(field, direction));
+        constraints.push(orderBy(field, direction));
         return this;
-      }
-
+      },
       limit(n: number) {
-        this.constraints.push(clientLimit(n));
+        constraints.push(limit(n));
         return this;
-      }
-
+      },
       async get() {
-        const q = this.constraints.length > 0 
-          ? clientQuery(this.colRef, ...this.constraints)
-          : this.colRef;
-        const querySnapshot = await clientGetDocs(q);
+        if (!clientDb) throw new Error("Firestore client is not initialized.");
+        const colRef = collection(clientDb, collectionName);
+        const q = constraints.length > 0 ? query(colRef, ...constraints) : colRef;
+        const snapshot = await getDocs(q);
         return {
-          empty: querySnapshot.empty,
-          size: querySnapshot.size,
-          docs: querySnapshot.docs.map(docSnap => ({
+          empty: snapshot.empty,
+          size: snapshot.size,
+          docs: snapshot.docs.map(docSnap => ({
             id: docSnap.id,
             ref: docSnap.ref,
             data() {
@@ -84,46 +82,52 @@ const db = {
             }
           }))
         };
-      }
-
+      },
       async add(data: any) {
-        const docRef = await clientAddDoc(this.colRef, data);
+        if (!clientDb) throw new Error("Firestore client is not initialized.");
+        const colRef = collection(clientDb, collectionName);
+        const docRef = await addDoc(colRef, data);
         return {
           id: docRef.id,
           ref: docRef
         };
-      }
-
+      },
       doc(docId: string) {
-        const dRef = clientDoc(clientDb, collectionName, docId);
         return {
           id: docId,
-          ref: dRef,
           async get() {
-            const docSnap = await clientGetDoc(dRef);
+            if (!clientDb) throw new Error("Firestore client is not initialized.");
+            const docRef = doc(clientDb, collectionName, docId);
+            const docSnap = await getDoc(docRef);
             return {
               exists: docSnap.exists(),
-              id: docSnap.id,
-              ref: docSnap.ref,
               data() {
                 return docSnap.data();
               }
             };
           },
           async set(data: any, options?: { merge?: boolean }) {
-            await clientSetDoc(dRef, data, options || {});
+            if (!clientDb) throw new Error("Firestore client is not initialized.");
+            const docRef = doc(clientDb, collectionName, docId);
+            if (options && typeof options.merge === 'boolean') {
+              await setDoc(docRef, data, { merge: options.merge });
+            } else {
+              await setDoc(docRef, data);
+            }
           },
           async update(data: any) {
-            await clientUpdateDoc(dRef, data);
+            if (!clientDb) throw new Error("Firestore client is not initialized.");
+            const docRef = doc(clientDb, collectionName, docId);
+            await updateDoc(docRef, data);
           },
           async delete() {
-            await clientDeleteDoc(dRef);
+            if (!clientDb) throw new Error("Firestore client is not initialized.");
+            const docRef = doc(clientDb, collectionName, docId);
+            await deleteDoc(docRef);
           }
         };
       }
-    }
-
-    return new CompatQuery();
+    };
   }
 };
 
@@ -265,6 +269,16 @@ let blogPosts: any[] = [
     tags: ["Prayer", "Unity", "Breakthrough"]
   }
 ];
+
+const INITIAL_USER_PROFILE = {
+  name: "",
+  email: "",
+  phone: "",
+  ministries: [] as string[],
+  avatar: "",
+  joinedDate: new Date().toISOString().split('T')[0],
+  isPastor: false,
+};
 
 let userProfile = { ...INITIAL_USER_PROFILE, name: "Sipho Myati", email: "siphom.yati@gmail.com", isPastor: false };
 
@@ -533,54 +547,191 @@ let ministries: any[] = [
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.text({ limit: '50mb', type: ['text/*', 'application/xml'] }));
+app.use(express.raw({ limit: '50mb', type: ['application/octet-stream', 'image/*'] }));
 
-// Setup uploaded images directory
-const publicDir = path.join(process.cwd(), 'public');
-const uploadsDir = path.join(publicDir, 'uploads');
-if (!fs.existsSync(publicDir)) {
-  fs.mkdirSync(publicDir, { recursive: true });
+// Safe helper to decode base64 data URLs without catastrophic backtracking regular expressions
+function parseBase64DataUrl(base64Str: any): { contentType: string; buffer: Buffer } {
+  if (typeof base64Str === 'string' && base64Str.startsWith('data:')) {
+    const commaIdx = base64Str.indexOf(',');
+    if (commaIdx !== -1) {
+      const mimePart = base64Str.substring(0, commaIdx);
+      const rawBase64 = base64Str.substring(commaIdx + 1);
+      let contentType = 'image/png';
+      const mimeMatch = mimePart.match(/^data:([^;]+);base64$/);
+      if (mimeMatch) {
+        contentType = mimeMatch[1];
+      }
+      return { contentType, buffer: Buffer.from(rawBase64, 'base64') };
+    }
+  }
+  const strVal = typeof base64Str === 'string' ? base64Str : '';
+  return { contentType: 'image/png', buffer: Buffer.from(strVal, 'base64') };
 }
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+
+// Resilient in-memory cache for uploaded files
+const inMemoryUploads = new Map<string, { contentType: string; buffer: Buffer }>();
+
+// Setup uploaded images directory with smart writable check fallback to /tmp/uploads
+const publicDir = path.join(process.cwd(), 'public');
+let uploadsDir = path.join(publicDir, 'uploads');
+
+try {
+  if (!fs.existsSync(publicDir)) {
+    fs.mkdirSync(publicDir, { recursive: true });
+  }
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+  // Test write permissions
+  const testFile = path.join(uploadsDir, '.write-test');
+  fs.writeFileSync(testFile, 'test');
+  fs.unlinkSync(testFile);
+  console.log(`Using persistent local directory for uploads: ${uploadsDir}`);
+} catch (e) {
+  console.warn('Unable to write to public/uploads directory, falling back to /tmp/uploads:', e);
+  try {
+    uploadsDir = path.join('/tmp', 'uploads');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+  } catch (tmpErr) {
+    console.error('Failed to create /tmp/uploads as fallback:', tmpErr);
+    // Fallback to process.cwd() as absolute last resort
+    uploadsDir = process.cwd();
+  }
 }
 
 // Serve /uploads statically in all modes (dev & prod)
 app.use('/uploads', express.static(uploadsDir));
 
+// Fallback for missing uploads: restore from Memory or Firestore if exists
+app.get('/uploads/:filename', async (req: Request, res: Response) => {
+  const filename = req.params.filename;
+
+  // 1. Check in-memory cache first
+  if (inMemoryUploads.has(filename)) {
+    const cached = inMemoryUploads.get(filename)!;
+    res.setHeader('Content-Type', cached.contentType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    return res.send(cached.buffer);
+  }
+
+  const ext = path.extname(filename);
+  const docId = path.basename(filename, ext);
+  
+  try {
+    const doc = await db.collection('assets').doc(docId).get();
+    if (doc.exists) {
+      const data = doc.data() as any;
+      const base64Str = data.base64;
+      
+      const { contentType, buffer } = parseBase64DataUrl(base64Str);
+      
+      // Save to local disk so it is served statically next time
+      const localPath = path.join(uploadsDir, filename);
+      try {
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+        fs.writeFileSync(localPath, buffer);
+        console.log(`Restored missing upload file to disk: ${filename}`);
+      } catch (writeErr) {
+        console.error('Failed to write restored upload file to disk:', writeErr);
+      }
+
+      // Cache in memory for subsequent requests
+      inMemoryUploads.set(filename, { contentType, buffer });
+      
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      return res.send(buffer);
+    }
+    res.status(404).send('Not found');
+  } catch (err) {
+    console.error('Failed to restore upload file from Firestore:', err);
+    res.status(500).send('Server Error');
+  }
+});
+
 // Config file for current image mapping (Legacy fallback)
 const configFilePath = path.join(uploadsDir, 'image-config.json');
 let appImages: Record<string, string> = {
-  pastor: "/pastor_portrait_1781085265986.png",
-  hero: "https://images.unsplash.com/photo-1438232992991-995b7058bcd3?w=1600&auto=format&fit=crop&q=80",
-  ministry_children: "https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=450&auto=format&fit=crop&q=80",
-  ministry_youth: "https://images.unsplash.com/photo-1529070538774-1843cb3265df?w=450&auto=format&fit=crop&q=80",
-  ministry_young_adults: "https://images.unsplash.com/photo-1529070538774-1843cb3265df?w=450&auto=format&fit=crop&q=80",
-  ministry_men: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=450&auto=format&fit=crop&q=80",
-  ministry_women: "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=450&auto=format&fit=crop&q=80",
-  ministry_family: "https://images.unsplash.com/photo-1511895426328-dc8714191300?w=450&auto=format&fit=crop&q=80",
-  ministry_evangelism: "https://images.unsplash.com/photo-1529070538774-1843cb3265df?w=450&auto=format&fit=crop&q=80",
-  ministry_worship: "https://images.unsplash.com/photo-1544427920-c49ccfb85579?w=450&auto=format&fit=crop&q=80",
-  ministry_prayer: "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=450&auto=format&fit=crop&q=80",
-  ministry_outreach: "https://images.unsplash.com/photo-1532629345422-7515f3d16bb6?w=450&auto=format&fit=crop&q=80",
-  ministry_preschool: "https://images.unsplash.com/photo-1502086223501-7ea6ecd79368?w=450&auto=format&fit=crop&q=80"
+  pastor: "",
+  hero: "",
+  ministry_children: "",
+  ministry_youth: "",
+  ministry_young_adults: "",
+  ministry_men: "",
+  ministry_women: "",
+  ministry_family: "",
+  ministry_evangelism: "",
+  ministry_worship: "",
+  ministry_prayer: "",
+  ministry_outreach: "",
+  ministry_preschool: ""
 };
+
+function sanitizeServerImages(images: Record<string, string>): Record<string, string> {
+  const sanitized = { ...images };
+  for (const key of Object.keys(sanitized)) {
+    const val = sanitized[key];
+    if (typeof val === 'string') {
+      if (
+        val.includes('unsplash.com') ||
+        val.includes('pastor_portrait') ||
+        val.includes('placeholder') ||
+        val.includes('/pastor_')
+      ) {
+        sanitized[key] = '';
+      }
+    }
+  }
+  return sanitized;
+}
 
 // Initial load: Priority Firestore > Local File > Hardcoded Defaults
 async function loadPersistentConfig() {
+  console.log('Loading persistent config...');
   // 1. Try Firestore
   try {
-    const doc = await db.collection('settings').doc('app-images').get();
+    console.log('Trying to get app-images from Firestore...');
+    const col = db.collection('settings');
+    console.log('Got settings collection:', !!col);
+    const docRef = col.doc('app-images');
+    console.log('Got app-images doc ref:', !!docRef);
+    const doc = await docRef.get();
+    console.log('Got app-images doc, exists:', doc.exists);
     if (doc.exists) {
       console.log('Images loaded from Firestore');
-      appImages = { ...appImages, ...doc.data() };
+      const data = doc.data() || {};
+      appImages = sanitizeServerImages({ ...appImages, ...data });
+      
+      // If any of the Firestore settings had legacy placeholder values, update the db with clean empty values
+      const hasPlaceholders = Object.keys(data).some(k => 
+        typeof data[k] === 'string' && (
+          data[k].includes('unsplash.com') || 
+          data[k].includes('pastor_portrait') || 
+          data[k].includes('placeholder') || 
+          data[k].includes('/pastor_')
+        )
+      );
+      if (hasPlaceholders) {
+        console.log('Sanitizing and cleaning up legacy images in Firestore...');
+        await saveImageConfig();
+      }
       return;
     }
   } catch (err: any) {
-    console.error("Failed to load images from Firestore:", err.message);
+    console.error("Failed to load images from Firestore:", err.message, err.stack);
     if (err.message && (err.message.includes('permission') || err.message.includes('PERMISSION_DENIED'))) {
       try {
+        console.log('Permission denied on settings/app-images, attempting handleFirestoreError');
         handleFirestoreError(err, OperationType.GET, 'settings/app-images');
-      } catch (e) {}
+      } catch (e) {
+        console.error('handleFirestoreError failed:', e);
+      }
     }
   }
 
@@ -588,7 +739,7 @@ async function loadPersistentConfig() {
   if (fs.existsSync(configFilePath)) {
     try {
       const data = fs.readFileSync(configFilePath, 'utf-8');
-      appImages = { ...appImages, ...JSON.parse(data) };
+      appImages = sanitizeServerImages({ ...appImages, ...JSON.parse(data) });
       console.log('Images loaded from local file fallback');
     } catch (err) {
       console.error("Failed to parse image-config.json:", err);
@@ -624,7 +775,20 @@ app.get('/api/images', async (req: Request, res: Response) => {
   try {
     const doc = await db.collection('settings').doc('app-images').get();
     if (doc.exists) {
-      appImages = { ...appImages, ...doc.data() };
+      const data = doc.data() || {};
+      appImages = sanitizeServerImages({ ...appImages, ...data });
+      
+      const hasPlaceholders = Object.keys(data).some(k => 
+        typeof data[k] === 'string' && (
+          data[k].includes('unsplash.com') || 
+          data[k].includes('pastor_portrait') || 
+          data[k].includes('placeholder') || 
+          data[k].includes('/pastor_')
+        )
+      );
+      if (hasPlaceholders) {
+        await saveImageConfig();
+      }
     }
   } catch (err) {
     console.error("Failed to fetch fresh images from Firestore:", err);
@@ -638,52 +802,145 @@ app.post('/api/images/update', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Key and active URL string are required.' });
   }
   
-  appImages[key] = url;
+  const isPlaceholder = url.includes('unsplash.com') || url.includes('pastor_portrait') || url.includes('placeholder') || url.includes('/pastor_');
+  appImages[key] = isPlaceholder ? '' : url;
   await saveImageConfig();
   res.json({ success: true, images: appImages });
 });
 
 app.post('/api/images/upload', async (req: Request, res: Response) => {
-  const { name, base64 } = req.body;
-  if (!name || !base64) {
-    return res.status(400).json({ error: 'Name and Base64 content are required.' });
+  console.log('--- HIT /api/images/upload ---');
+  let name = req.body?.name || req.body?.filename || req.body?.fileName || req.body?.title;
+  let base64 = req.body?.base64 || req.body?.image || req.body?.file || req.body?.data || req.body?.content;
+
+  // Handle if req.body is a raw binary Buffer (e.g. from express.raw)
+  if (Buffer.isBuffer(req.body)) {
+    base64 = req.body.toString('base64');
+  }
+
+  // Fallback if req.body is a raw string
+  if (!base64 && typeof req.body === 'string') {
+    try {
+      const parsed = JSON.parse(req.body);
+      name = name || parsed.name || parsed.filename || parsed.fileName || parsed.title;
+      base64 = parsed.base64 || parsed.image || parsed.file || parsed.data || parsed.content;
+    } catch (e) {
+      if (req.body.startsWith('data:') || req.body.length > 50) {
+        base64 = req.body;
+      }
+    }
+  }
+
+  if (!base64) {
+    return res.status(400).json({ error: 'Base64 content is required.' });
+  }
+  if (!name) {
+    name = 'uploaded_image.png';
   }
 
   try {
     // Create safe unique ID
     const sanitizedName = name.replace(/[^a-zA-Z0-9.\-_]/g, '');
-    const baseName = path.basename(sanitizedName, path.extname(sanitizedName)) || 'img';
+    const ext = path.extname(sanitizedName) || '.png';
+    const baseName = path.basename(sanitizedName, ext) || 'img';
     const docId = `${baseName}_${Date.now()}`;
+    const filename = `${docId}${ext}`;
 
-    // Store in Firestore to persist across serverless deployments
-    await db.collection('assets').doc(docId).set({ base64, name: sanitizedName });
-    
-    const publicUrl = `/api/assets/${docId}`;
-    res.json({ success: true, url: publicUrl });
+    // Decode base64 to buffer using safe helper
+    const { contentType, buffer } = parseBase64DataUrl(base64);
+
+    // Always try to write to local disk first
+    let savedLocally = false;
+    try {
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+      const localPath = path.join(uploadsDir, filename);
+      fs.writeFileSync(localPath, buffer);
+      console.log(`Saved uploaded file to local disk: ${filename}`);
+      savedLocally = true;
+    } catch (writeErr) {
+      console.error('Failed to write uploaded file to disk:', writeErr);
+    }
+
+    // Always cache in memory for bulletproof resiliency
+    inMemoryUploads.set(filename, { contentType, buffer });
+
+    const fileSize = buffer.length;
+    console.log(`Uploaded file size: ${fileSize} bytes`);
+
+    // Only store in Firestore if it fits within safe Firestore boundaries (< 600KB base64 string)
+    let persistedInFirestore = false;
+    if (base64.length <= 800000) {
+      try {
+        await db.collection('assets').doc(docId).set({ base64, name: sanitizedName });
+        persistedInFirestore = true;
+        console.log(`Uploaded file persisted in Firestore doc ${docId}`);
+      } catch (fsErr) {
+        console.warn(`Firestore backup failed (will still work locally and in memory):`, fsErr);
+      }
+    } else {
+      console.log(`File size is too large for Firestore backup. Skipping Firestore persistence.`);
+    }
+
+    // Return the local static URL: /uploads/${filename}
+    const publicUrl = `/uploads/${filename}`;
+    res.json({ success: true, url: publicUrl, persistedInFirestore, savedLocally });
   } catch (err: any) {
-    console.error('File Upload Error:', err);
-    res.status(500).json({ error: err.message || 'Failed to save uploaded file' });
+    console.error('File Upload Error:', err.stack || err);
+    res.status(500).json({ error: err.message || 'Failed to save uploaded file', stack: err.stack || String(err) });
   }
 });
 
 app.get('/api/assets/:id', async (req: Request, res: Response) => {
   try {
-    const doc = await db.collection('assets').doc(req.params.id).get();
+    const id = req.params.id;
+    
+    // 1. Try to serve from local uploads disk first
+    if (fs.existsSync(uploadsDir)) {
+      try {
+        const files = fs.readdirSync(uploadsDir);
+        const matchedFile = files.find(f => f.startsWith(id));
+        if (matchedFile) {
+          const localPath = path.join(uploadsDir, matchedFile);
+          const ext = path.extname(matchedFile).toLowerCase();
+          let contentType = 'image/png';
+          if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+          else if (ext === '.gif') contentType = 'image/gif';
+          else if (ext === '.webp') contentType = 'image/webp';
+          else if (ext === '.svg') contentType = 'image/svg+xml';
+          
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          return res.sendFile(localPath);
+        }
+      } catch (dirErr) {
+        console.error('Failed reading uploads directory:', dirErr);
+      }
+    }
+
+    // 2. Fallback: Fetch from Firestore assets collection
+    const doc = await db.collection('assets').doc(id).get();
     if (doc.exists) {
       const data = doc.data() as any;
       const base64Str = data.base64;
       
-      const match = base64Str.match(/^data:([^;]+);base64,(.+)$/);
-      if (match) {
-        const contentType = match[1];
-        const rawBase64 = match[2];
-        const buffer = Buffer.from(rawBase64, 'base64');
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-        res.send(buffer);
-      } else {
-        res.status(400).send('Invalid image format');
+      const { contentType, buffer } = parseBase64DataUrl(base64Str);
+      
+      // Cache to local disk for future requests
+      try {
+        const mimeExt = contentType.split('/')[1] || 'png';
+        const ext = mimeExt === 'jpeg' ? '.jpg' : `.${mimeExt}`;
+        const localPath = path.join(uploadsDir, `${id}${ext}`);
+        fs.writeFileSync(localPath, buffer);
+        console.log(`Cached file from Firestore to local disk: ${id}${ext}`);
+      } catch (writeErr) {
+        console.error('Failed to cache file to disk:', writeErr);
       }
+
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      return res.send(buffer);
     } else {
       res.status(404).send('Not found');
     }
@@ -1771,12 +2028,9 @@ async function startServer() {
   });
 }
 
-if (!process.env.VERCEL) {
-  startServer();
-} else {
-  // On Vercel, run initializers asynchronously on startup
-  loadPersistentConfig().catch(console.error);
-  seedDatabaseIfEmpty().catch(console.error);
-}
+startServer().catch(err => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+});
 
 export default app;

@@ -28,20 +28,38 @@ interface ImageContextType {
 const ImageContext = createContext<ImageContextType | undefined>(undefined);
 
 const FALLBACKS: AppImages = {
-  pastor: "/pastor_portrait_1781085265986.png",
-  hero: "https://images.unsplash.com/photo-1438232992991-995b7058bcd3?w=1600&auto=format&fit=crop&q=80",
-  ministry_children: "https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=450&auto=format&fit=crop&q=80",
-  ministry_youth: "https://images.unsplash.com/photo-1529070538774-1843cb3265df?w=450&auto=format&fit=crop&q=80",
-  ministry_young_adults: "https://images.unsplash.com/photo-1529070538774-1843cb3265df?w=450&auto=format&fit=crop&q=80",
-  ministry_men: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=450&auto=format&fit=crop&q=80",
-  ministry_women: "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=450&auto=format&fit=crop&q=80",
-  ministry_family: "https://images.unsplash.com/photo-1511895426328-dc8714191300?w=450&auto=format&fit=crop&q=80",
-  ministry_evangelism: "https://images.unsplash.com/photo-1529070538774-1843cb3265df?w=450&auto=format&fit=crop&q=80",
-  ministry_worship: "https://images.unsplash.com/photo-1544427920-c49ccfb85579?w=450&auto=format&fit=crop&q=80",
-  ministry_prayer: "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=450&auto=format&fit=crop&q=80",
-  ministry_outreach: "https://images.unsplash.com/photo-1532629345422-7515f3d16bb6?w=450&auto=format&fit=crop&q=80",
-  ministry_preschool: "https://images.unsplash.com/photo-1502086223501-7ea6ecd79368?w=450&auto=format&fit=crop&q=80",
+  pastor: "",
+  hero: "",
+  ministry_children: "",
+  ministry_youth: "",
+  ministry_young_adults: "",
+  ministry_men: "",
+  ministry_women: "",
+  ministry_family: "",
+  ministry_evangelism: "",
+  ministry_worship: "",
+  ministry_prayer: "",
+  ministry_outreach: "",
+  ministry_preschool: "",
 };
+
+function sanitizeAppImages(data: any): AppImages {
+  const sanitized = { ...FALLBACKS, ...data };
+  for (const key of Object.keys(sanitized)) {
+    const val = sanitized[key];
+    if (typeof val === 'string') {
+      if (
+        val.includes('unsplash.com') ||
+        val.includes('pastor_portrait') ||
+        val.includes('placeholder') ||
+        val.includes('/pastor_')
+      ) {
+        sanitized[key] = '';
+      }
+    }
+  }
+  return sanitized;
+}
 
 export function ImageProvider({ children }: { children: React.ReactNode }) {
   const [images, setImages] = useState<AppImages>(FALLBACKS);
@@ -52,7 +70,7 @@ export function ImageProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch('/api/images');
       if (res.ok) {
         const data = await res.json();
-        setImages(prev => ({ ...prev, ...data }));
+        setImages(sanitizeAppImages(data));
       }
     } catch (err) {
       console.error('Failed to fetch image mapping:', err);
@@ -66,14 +84,16 @@ export function ImageProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateMapping = async (key: string, url: string): Promise<boolean> => {
+    const isPlaceholder = url.includes('unsplash.com') || url.includes('pastor_portrait') || url.includes('placeholder') || url.includes('/pastor_');
+    const finalUrl = isPlaceholder ? '' : url;
     try {
       const res = await fetch('/api/images/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, url }),
+        body: JSON.stringify({ key, url: finalUrl }),
       });
       if (res.ok) {
-        setImages(prev => ({ ...prev, [key]: url }));
+        setImages(prev => ({ ...prev, [key]: finalUrl }));
         return true;
       }
     } catch (err) {

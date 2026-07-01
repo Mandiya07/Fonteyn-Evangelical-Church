@@ -83,7 +83,6 @@ export default function BibleView({ language }: BibleViewProps) {
             
             {/* Verse of the Day Hero */}
             <div className="bg-primary rounded-3xl p-8 sm:p-12 text-center text-white relative overflow-hidden shadow-xl border-b-4 border-secondary">
-              <div className="absolute top-0 left-0 w-full h-full bg-[url('https://images.unsplash.com/photo-1504052434569-70ad5836ab65?w=1000&auto=format&fit=crop&q=80&fit=crop')] bg-cover bg-center opacity-10 mix-blend-overlay"></div>
               <div className="absolute -top-10 -right-10 text-secondary/10">
                 <BookOpen className="w-64 h-64" />
               </div>
@@ -216,8 +215,8 @@ export default function BibleView({ language }: BibleViewProps) {
              
              {/* Left: Featured Devotional */}
              <div className="lg:col-span-2 bg-white rounded-3xl border border-gray-150 shadow-sm overflow-hidden flex flex-col sm:flex-row">
-               <div className="w-full sm:w-2/5 aspect-square sm:aspect-auto bg-gray-100 relative">
-                 <img loading="lazy" src="https://images.unsplash.com/photo-1544465544-1b71aee9dfa3?w=600&auto=format&fit=crop&q=80&fit=crop" className="w-full h-full object-cover" alt="Devotional" />
+               <div className="w-full sm:w-2/5 aspect-square sm:aspect-auto bg-primary/5 flex items-center justify-center relative">
+                 <BookOpen className="w-16 h-16 text-gray-300 animate-pulse" />
                  <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded text-[10px] font-bold text-primary uppercase tracking-widest shadow-sm">
                    Today's Reading
                  </div>

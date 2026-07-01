@@ -23,10 +23,10 @@ const EXCLUSIVE_CONTENT = [
 ];
 
 const CHURCH_DIRECTORY = [
-  { id: 'cd1', familyName: 'Dlamini Family', members: ['Sipho', 'Zinhle', 'Thabo (Child)'], phone: '+268 7600 1111', email: 'dlamini.family@example.com', isPrivate: false, avatar: 'https://images.unsplash.com/photo-1542038784456-1ea8e935640e?w=200&auto=format&fit=crop&q=80&fit=crop' },
-  { id: 'cd2', familyName: 'Mnisi Family', members: ['LS', 'Lindiwe', 'Sibusiso', 'Nomsa'], phone: '+268 7611 2222', email: 'mnisi@example.com', isPrivate: false, avatar: 'https://images.unsplash.com/photo-1531123897727-8f129e1bfd8c?w=200&auto=format&fit=crop&q=80&fit=crop' },
-  { id: 'cd3', familyName: 'Ndlovu Family', members: ['Sarah', 'Buhle (Child)'], phone: '+268 7622 3333', email: 'sarah.ndlovu@example.com', isPrivate: true, avatar: 'https://images.unsplash.com/photo-1523824922870-a6201560e4eb?w=200&auto=format&fit=crop&q=80&fit=crop' },
-  { id: 'cd4', familyName: 'Maseko Household', members: ['Sanele'], phone: '+268 7644 4444', email: 'sanele.m@example.com', isPrivate: false, avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80&fit=crop' },
+  { id: 'cd1', familyName: 'Dlamini Family', members: ['Sipho', 'Zinhle', 'Thabo (Child)'], phone: '+268 7600 1111', email: 'dlamini.family@example.com', isPrivate: false, avatar: '' },
+  { id: 'cd2', familyName: 'Mnisi Family', members: ['LS', 'Lindiwe', 'Sibusiso', 'Nomsa'], phone: '+268 7611 2222', email: 'mnisi@example.com', isPrivate: false, avatar: '' },
+  { id: 'cd3', familyName: 'Ndlovu Family', members: ['Sarah', 'Buhle (Child)'], phone: '+268 7622 3333', email: 'sarah.ndlovu@example.com', isPrivate: true, avatar: '' },
+  { id: 'cd4', familyName: 'Maseko Household', members: ['Sanele'], phone: '+268 7644 4444', email: 'sanele.m@example.com', isPrivate: false, avatar: '' },
 ];
 
 interface MemberViewProps {

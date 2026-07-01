@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Shield, Compass, CheckCircle, CreditCard, Send, Printer, BookOpen, Video, Headphones, Download, Share2, FileText, MapPin, Clock, Quote, Sparkles, RefreshCw } from 'lucide-react';
+import { Calendar, Shield, Compass, CheckCircle, CreditCard, Send, Printer, BookOpen, Video, Headphones, Download, Share2, FileText, MapPin, Clock, Quote, Sparkles, RefreshCw, User } from 'lucide-react';
 import { useAppImages } from './ImageContext';
 import DailyScripture from './DailyScripture';
 
@@ -125,17 +125,17 @@ export default function HomeView({ setCurrentTab, language, onNewDonation, onNew
   };
 
   const ministries = [
-    { title: "Children's Ministry", src: images.ministry_children || "https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=450&auto=format&fit=crop&q=80" },
-    { title: "Youth Ministry", src: images.ministry_youth || "https://images.unsplash.com/photo-1529070538774-1843cb3265df?w=450&auto=format&fit=crop&q=80" },
-    { title: "Young Adults Ministry", src: images.ministry_young_adults || "https://images.unsplash.com/photo-1529070538774-1843cb3265df?w=450&auto=format&fit=crop&q=80" },
-    { title: "Men's Fellowship", src: images.ministry_men || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=450&auto=format&fit=crop&q=80" },
-    { title: "Women's Fellowship", src: images.ministry_women || "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=450&auto=format&fit=crop&q=80" },
-    { title: "Family Ministry", src: images.ministry_family || "https://images.unsplash.com/photo-1511895426328-dc8714191300?w=450&auto=format&fit=crop&q=80" },
-    { title: "Evangelism Ministry", src: images.ministry_evangelism || "https://images.unsplash.com/photo-1529070538774-1843cb3265df?w=450&auto=format&fit=crop&q=80" },
-    { title: "Worship Ministry", src: images.ministry_worship || "https://images.unsplash.com/photo-1544427920-c49ccfb85579?w=450&auto=format&fit=crop&q=80" },
-    { title: "Prayer Ministry", src: images.ministry_prayer || "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=450&auto=format&fit=crop&q=80" },
-    { title: "Community Outreach Ministry", src: images.ministry_outreach || "https://images.unsplash.com/photo-1532629345422-7515f3d16bb6?w=450&auto=format&fit=crop&q=80" },
-    { title: "Christian Preschool", src: images.ministry_preschool || "https://images.unsplash.com/photo-1502086223501-7ea6ecd79368?w=450&auto=format&fit=crop&q=80" },
+    { title: "Children's Ministry", src: images.ministry_children || "" },
+    { title: "Youth Ministry", src: images.ministry_youth || "" },
+    { title: "Young Adults Ministry", src: images.ministry_young_adults || "" },
+    { title: "Men's Fellowship", src: images.ministry_men || "" },
+    { title: "Women's Fellowship", src: images.ministry_women || "" },
+    { title: "Family Ministry", src: images.ministry_family || "" },
+    { title: "Evangelism Ministry", src: images.ministry_evangelism || "" },
+    { title: "Worship Ministry", src: images.ministry_worship || "" },
+    { title: "Prayer Ministry", src: images.ministry_prayer || "" },
+    { title: "Community Outreach Ministry", src: images.ministry_outreach || "" },
+    { title: "Christian Preschool", src: images.ministry_preschool || "" },
   ];
 
   const testimonials = [
@@ -163,7 +163,7 @@ export default function HomeView({ setCurrentTab, language, onNewDonation, onNew
       date: "October 15, 2023",
       scripture: "Hebrews 11:1-6",
       type: "video",
-      image: "https://images.unsplash.com/photo-1438232992991-995b7058bcd3?w=600&auto=format&fit=crop&q=80"
+      image: ""
     },
     {
       title: "Walking in Compassion",
@@ -171,7 +171,7 @@ export default function HomeView({ setCurrentTab, language, onNewDonation, onNew
       date: "October 8, 2023",
       scripture: "Colossians 3:12-14",
       type: "audio",
-      image: "https://images.unsplash.com/photo-1473625247510-8ceb1760943f?w=600&auto=format&fit=crop&q=80"
+      image: ""
     }
   ];
 
@@ -181,14 +181,14 @@ export default function HomeView({ setCurrentTab, language, onNewDonation, onNew
       date: "Nov 12, 2023",
       time: "09:00 AM - 04:00 PM",
       location: "Fonteyn Main Sanctuary",
-      image: "https://images.unsplash.com/photo-1529070538774-1843cb3265df?w=600&auto=format&fit=crop&q=80"
+      image: ""
     },
     {
       title: "Community Soup Kitchen",
       date: "Nov 18, 2023",
       time: "11:00 AM - 02:00 PM",
       location: "Mbabane Town Center",
-      image: "https://images.unsplash.com/photo-1532629345422-7515f3d16bb6?w=600&auto=format&fit=crop&q=80"
+      image: ""
     }
   ];
 
@@ -199,12 +199,14 @@ export default function HomeView({ setCurrentTab, language, onNewDonation, onNew
       <section className="relative bg-primary overflow-hidden min-h-[550px] sm:min-h-[650px] flex items-center border-b-8 border-secondary" id="hero-banner-section">
         {/* Background Image Overlay */}
         <div className="absolute inset-0 z-0">
-          <img loading="lazy" 
-            src={images.hero || "https://images.unsplash.com/photo-1438232992991-995b7058bcd3?w=1200&auto=format&fit=crop&q=80"} 
-            alt="Worship Congregation"
-            className="w-full h-full object-cover opacity-55 saturate-[1.15] brightness-[0.70]"
-            referrerPolicy="no-referrer"
-          />
+          {images.hero && (
+            <img loading="lazy" 
+              src={images.hero} 
+              alt="Worship Congregation"
+              className="w-full h-full object-cover opacity-55 saturate-[1.15] brightness-[0.70]"
+              referrerPolicy="no-referrer"
+            />
+          )}
           {/* A softer, progressive dark blue gradient overlay to blend gently without masking out the image */}
           <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-primary/65 to-primary"></div>
         </div>
@@ -255,15 +257,22 @@ export default function HomeView({ setCurrentTab, language, onNewDonation, onNew
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
             {/* Pastor Photo Column */}
             <div className="lg:col-span-5 relative flex justify-center" id="pastor-photo-holder">
-              <div className="relative group max-w-sm sm:max-w-md">
+              <div className="relative group max-w-sm sm:max-w-md w-full">
                 <div className="absolute -inset-2 bg-gradient-to-r from-secondary to-primary rounded-2xl blur-md opacity-35 group-hover:opacity-60 transition duration-500"></div>
-                <div className="relative bg-white p-2.5 rounded-2xl border border-gray-200 shadow-xl overflow-hidden">
-                  <img loading="lazy" 
-                    src={images.pastor || "/pastor_portrait_1781085265986.png"} 
-                    alt="Pastor Photo"
-                    className="w-full h-[380px] object-cover rounded-xl"
-                    referrerPolicy="no-referrer"
-                  />
+                <div className="relative bg-white p-2.5 rounded-2xl border border-gray-200 shadow-xl overflow-hidden w-full">
+                  {images.pastor ? (
+                    <img loading="lazy" 
+                      src={images.pastor} 
+                      alt="Pastor Photo"
+                      className="w-full h-[380px] object-cover rounded-xl"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-full h-[380px] bg-primary/5 flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-200">
+                      <User className="w-24 h-24 text-gray-300 animate-pulse" />
+                      <span className="text-xs text-gray-400 mt-2 font-mono">No portrait uploaded</span>
+                    </div>
+                  )}
                   <div className="absolute bottom-5 left-5 right-5 bg-primary/95 border border-secondary/30 text-white rounded-xl py-3 px-4.5 text-center shadow-lg">
                     <h4 className="font-header text-sm font-bold tracking-wide">Rev LS Mnisi</h4>
                     <p className="text-[10px] text-secondary font-sans font-semibold tracking-wider uppercase mt-1">Senior Pastor, Fonteyn FEC</p>

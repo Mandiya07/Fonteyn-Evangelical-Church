@@ -17,31 +17,31 @@ export default function OutreachView({ language }: OutreachViewProps) {
       title: 'Charity Projects & Soup Kitchen',
       description: 'Providing weekly meals and basic necessities to the homeless and vulnerable families in Mbabane and surrounding communities.',
       icon: <Utensils className="w-6 h-6 text-primary" />,
-      image: 'https://images.unsplash.com/photo-1593113580332-6ace6178c187?w=600&auto=format&fit=crop&q=80&fit=crop'
+      image: ''
     },
     {
       title: 'Youth Empowerment Initiatives',
       description: 'Mentorship, skills training, and educational support for high school students and young adults to build sustainable futures.',
       icon: <BookOpen className="w-6 h-6 text-primary" />,
-      image: 'https://images.unsplash.com/photo-1523580494863-6f30312245a5?w=600&auto=format&fit=crop&q=80&fit=crop'
+      image: ''
     },
     {
       title: 'Community Health Programs',
       description: 'Partnering with local clinics to offer free health screenings, counseling, and wellness seminars for our neighborhood.',
       icon: <Activity className="w-6 h-6 text-primary" />,
-      image: 'https://images.unsplash.com/photo-1576091160550-2173ff9e5ee5?w=600&auto=format&fit=crop&q=80&fit=crop'
+      image: ''
     },
     {
       title: 'Evangelism & Street Ministry',
       description: 'Taking the Gospel to the streets through open-air meetings, tract distribution, and one-on-one personal evangelism.',
       icon: <Users className="w-6 h-6 text-primary" />,
-      image: 'https://images.unsplash.com/photo-1529070538774-1843cb3265df?w=600&auto=format&fit=crop&q=80&fit=crop'
+      image: ''
     },
     {
       title: 'Global Mission Trips',
       description: 'Annual short-term mission trips supporting church planting, orphanage builds, and relief work beyond Eswatini borders.',
       icon: <Globe className="w-6 h-6 text-primary" />,
-      image: 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=600&auto=format&fit=crop&q=80&fit=crop'
+      image: ''
     }
   ];
 
@@ -112,9 +112,15 @@ export default function OutreachView({ language }: OutreachViewProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {programs.map((program, idx) => (
               <div key={idx} className="bg-white rounded-2xl border border-gray-150 overflow-hidden shadow-sm hover:shadow-xl hover:border-secondary transition duration-300 group flex flex-col">
-                <div className="h-48 overflow-hidden relative">
-                  <img loading="lazy" src={program.image} alt={program.title} className="w-full h-full object-cover group-hover:scale-110 transition duration-700" />
-                  <div className="absolute inset-0 bg-primary/20 group-hover:bg-transparent transition duration-300"></div>
+                <div className="h-48 overflow-hidden relative bg-primary/5 flex items-center justify-center">
+                  {program.image ? (
+                    <>
+                      <img loading="lazy" src={program.image} alt={program.title} className="w-full h-full object-cover group-hover:scale-110 transition duration-700" />
+                      <div className="absolute inset-0 bg-primary/20 group-hover:bg-transparent transition duration-300"></div>
+                    </>
+                  ) : (
+                    <HandHeart className="w-14 h-14 text-gray-300 animate-pulse" />
+                  )}
                 </div>
                 <div className="p-6 flex-1 flex flex-col">
                   <div className="w-12 h-12 bg-secondary/10 rounded-full flex items-center justify-center mb-4 text-primary">

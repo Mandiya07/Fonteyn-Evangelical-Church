@@ -39,59 +39,45 @@ export default function MediaView({ language }: MediaViewProps) {
       title: 'Resurrection Sunday Service',
       date: 'April 9, 2023',
       category: 'Worship Services',
-      coverImage: 'https://images.unsplash.com/photo-1438283173091-5dbf5c5a3206?w=600&auto=format&fit=crop&q=80&fit=crop',
-      imageCount: 42,
-      images: [
-        'https://images.unsplash.com/photo-1438283173091-5dbf5c5a3206?w=1000&auto=format&fit=crop&q=80&fit=crop',
-        'https://images.unsplash.com/photo-1445905595283-214c6282128b?w=1000&auto=format&fit=crop&q=80&fit=crop',
-        'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=1000&auto=format&fit=crop&q=80&fit=crop',
-      ]
+      coverImage: '',
+      imageCount: 0,
+      images: []
     },
     {
       id: 'a2',
       title: 'National Men\'s Conference',
       date: 'August 12, 2023',
       category: 'Conferences',
-      coverImage: 'https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=600&auto=format&fit=crop&q=80&fit=crop',
-      imageCount: 128,
-      images: [
-        'https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=1000&auto=format&fit=crop&q=80&fit=crop',
-        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=1000&auto=format&fit=crop&q=80&fit=crop',
-      ]
+      coverImage: '',
+      imageCount: 0,
+      images: []
     },
     {
       id: 'a3',
       title: 'Youth Explosion Retreat',
       date: 'June 20, 2023',
       category: 'Youth Events',
-      coverImage: 'https://images.unsplash.com/photo-1523580494863-6f30312245a5?w=600&auto=format&fit=crop&q=80&fit=crop',
-      imageCount: 85,
-      images: [
-        'https://images.unsplash.com/photo-1523580494863-6f30312245a5?w=1000&auto=format&fit=crop&q=80&fit=crop',
-        'https://images.unsplash.com/photo-1529070538774-1843cb3265df?w=1000&auto=format&fit=crop&q=80&fit=crop',
-      ]
+      coverImage: '',
+      imageCount: 0,
+      images: []
     },
     {
       id: 'a4',
       title: 'Mbabane Orphanage Visit',
       date: 'December 15, 2022',
       category: 'Outreach Programs',
-      coverImage: 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=600&auto=format&fit=crop&q=80&fit=crop',
-      imageCount: 56,
-      images: [
-        'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=1000&auto=format&fit=crop&q=80&fit=crop',
-      ]
+      coverImage: '',
+      imageCount: 0,
+      images: []
     },
     {
       id: 'a5',
       title: 'Christmas Carols Night',
       date: 'December 24, 2022',
       category: 'Special Events',
-      coverImage: 'https://images.unsplash.com/photo-1514320291840-2bc89897d387?w=600&auto=format&fit=crop&q=80&fit=crop',
-      imageCount: 75,
-      images: [
-        'https://images.unsplash.com/photo-1514320291840-2bc89897d387?w=1000&auto=format&fit=crop&q=80&fit=crop',
-      ]
+      coverImage: '',
+      imageCount: 0,
+      images: []
     }
   ];
 
@@ -102,7 +88,7 @@ export default function MediaView({ language }: MediaViewProps) {
       date: 'October 15, 2023',
       platform: 'YouTube',
       duration: '2:15:30',
-      thumbnail: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=600&auto=format&fit=crop&q=80&fit=crop',
+      thumbnail: '',
       url: 'https://youtube.com',
       views: '1.2k'
     },
@@ -112,7 +98,7 @@ export default function MediaView({ language }: MediaViewProps) {
       date: 'October 11, 2023',
       platform: 'Facebook',
       duration: '1:05:22',
-      thumbnail: 'https://images.unsplash.com/photo-1445905595283-214c6282128b?w=600&auto=format&fit=crop&q=80&fit=crop',
+      thumbnail: '',
       url: 'https://facebook.com',
       views: '856'
     },
@@ -122,7 +108,7 @@ export default function MediaView({ language }: MediaViewProps) {
       date: 'September 28, 2023',
       platform: 'Vimeo',
       duration: '45:10',
-      thumbnail: 'https://images.unsplash.com/photo-1514320291840-2bc89897d387?w=600&auto=format&fit=crop&q=80&fit=crop',
+      thumbnail: '',
       url: 'https://vimeo.com',
       views: '3.4k'
     }
@@ -433,11 +419,7 @@ export default function MediaView({ language }: MediaViewProps) {
                <div className="lg:col-span-2 bg-neutral-900 relative">
                   {/* Mock Video Player */}
                   <div className="aspect-video w-full flex items-center justify-center bg-black relative">
-                     <img loading="lazy" 
-                       src="https://images.unsplash.com/photo-1438283173091-5dbf5c5a3206?w=1200&auto=format&fit=crop&q=80&fit=crop" 
-                       className="absolute inset-0 w-full h-full object-cover opacity-30"
-                       alt="Live Stream Background"
-                     />
+                     <div className="absolute inset-0 w-full h-full bg-neutral-900 opacity-80" />
                      <div className="absolute top-4 left-4 flex items-center gap-2">
                        <span className="flex h-3 w-3 relative">
                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
