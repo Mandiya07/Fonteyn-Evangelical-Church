@@ -20,20 +20,9 @@ import {
   limit,
   QueryConstraint
 } from 'firebase/firestore';
+import firebaseConfig from './firebase-applet-config.json';
 
 console.log('Starting server...');
-
-// Handle Firebase configuration from config file if exists
-let firebaseConfig: any = null;
-const firebaseConfigPath = path.join(process.cwd(), 'firebase-applet-config.json');
-if (fs.existsSync(firebaseConfigPath)) {
-  try {
-    firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, 'utf-8'));
-    console.log('Firebase config loaded:', firebaseConfig.projectId);
-  } catch (err) {
-    console.error('Failed to parse firebase-applet-config.json:', err);
-  }
-}
 
 // Initialize Client Firebase App
 const firebaseApp = firebaseConfig?.apiKey ? initializeApp({
