@@ -45,6 +45,7 @@ const FALLBACKS: AppImages = {
 
 function sanitizeAppImages(data: any): AppImages {
   const sanitized = { ...FALLBACKS, ...data };
+  const cb = Date.now().toString();
   for (const key of Object.keys(sanitized)) {
     const val = sanitized[key];
     if (typeof val === 'string') {
@@ -55,6 +56,20 @@ function sanitizeAppImages(data: any): AppImages {
         val.includes('/pastor_')
       ) {
         sanitized[key] = '';
+      } else if (val) {
+        try {
+          if (val.startsWith('http://') || val.startsWith('https://')) {
+            const parsed = new URL(val);
+            parsed.searchParams.set('cb', cb);
+            sanitized[key] = parsed.toString();
+          } else {
+            const separator = val.includes('?') ? '&' : '?';
+            sanitized[key] = `${val}${separator}cb=${cb}`;
+          }
+        } catch (e) {
+          const separator = val.includes('?') ? '&' : '?';
+          sanitized[key] = `${val}${separator}cb=${cb}`;
+        }
       }
     }
   }
@@ -93,7 +108,24 @@ export function ImageProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ key, url: finalUrl }),
       });
       if (res.ok) {
-        setImages(prev => ({ ...prev, [key]: finalUrl }));
+        let busterUrl = '';
+        if (finalUrl) {
+          const cb = Date.now().toString();
+          try {
+            if (finalUrl.startsWith('http://') || finalUrl.startsWith('https://')) {
+              const urlObj = new URL(finalUrl);
+              urlObj.searchParams.set('cb', cb);
+              busterUrl = urlObj.toString();
+            } else {
+              const separator = finalUrl.includes('?') ? '&' : '?';
+              busterUrl = `${finalUrl}${separator}cb=${cb}`;
+            }
+          } catch (e) {
+            const separator = finalUrl.includes('?') ? '&' : '?';
+            busterUrl = `${finalUrl}${separator}cb=${cb}`;
+          }
+        }
+        setImages(prev => ({ ...prev, [key]: busterUrl }));
         return true;
       }
     } catch (err) {
