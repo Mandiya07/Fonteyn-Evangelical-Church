@@ -82,7 +82,7 @@ export function ImageProvider({ children }: { children: React.ReactNode }) {
 
   const refreshImages = async () => {
     try {
-      const res = await fetch('/api/images');
+      const res = await fetch(`/api/images?_t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
         setImages(sanitizeAppImages(data));
