@@ -6,6 +6,12 @@ import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import { initializeApp } from 'firebase/app';
 import { 
+  getStorage, 
+  ref as storageRef, 
+  uploadBytes, 
+  getBytes 
+} from 'firebase/storage';
+import { 
   getFirestore, 
   initializeFirestore,
   collection, 
@@ -51,6 +57,10 @@ if (firebaseApp) {
 }
 
 console.log('Firebase Client SDK initialized:', !!clientDb);
+
+const storage = firebaseApp ? getStorage(firebaseApp) : null;
+console.log('Firebase Storage SDK initialized:', !!storage);
+let isStorageDisabled = false;
 
 const db = {
   collection(collectionName: string) {
@@ -857,23 +867,47 @@ app.post('/api/images/upload', async (req: Request, res: Response) => {
     const fileSize = buffer.length;
     console.log(`Uploaded file size: ${fileSize} bytes`);
 
-    // Only store in Firestore if it fits within safe Firestore boundaries (< 1MB base64 string)
-    let persistedInFirestore = false;
-    if (base64.length <= 1040000) {
+    // Try uploading to Firebase Storage if configured
+    let uploadedToStorage = false;
+    if (storage && !isStorageDisabled) {
       try {
-        await db.collection('assets').doc(docId).set({ base64, name: sanitizedName });
-        persistedInFirestore = true;
-        console.log(`Uploaded file persisted in Firestore doc ${docId}`);
-      } catch (fsErr) {
-        console.warn(`Firestore backup failed (will still work locally and in memory):`, fsErr);
+        const fileRef = storageRef(storage, `assets/${filename}`);
+        await uploadBytes(fileRef, buffer, { contentType });
+        uploadedToStorage = true;
+        console.log(`Successfully uploaded ${filename} to Firebase Storage as assets/${filename}`);
+      } catch (storageErr) {
+        isStorageDisabled = true;
+        console.warn(`Firebase Storage is not enabled or permission is denied. Gracefully falling back to robust Firestore document persistence. Info:`, storageErr);
       }
-    } else {
-      console.log(`File size is too large for Firestore backup (${base64.length} chars). Skipping Firestore persistence.`);
+    }
+
+    // Store in Firestore with metadata, fallback base64, and storagePath reference
+    let persistedInFirestore = false;
+    try {
+      const docData: any = {
+        name: sanitizedName,
+        contentType,
+        storagePath: uploadedToStorage ? `assets/${filename}` : null,
+        updatedAt: new Date().toISOString()
+      };
+      
+      // Store base64 inside Firestore only if it's within safe boundaries (< 1MB)
+      if (base64.length <= 1040000) {
+        docData.base64 = base64;
+      } else {
+        console.log(`Base64 size (${base64.length} chars) is too large for Firestore document. Using Firebase Storage instead.`);
+      }
+
+      await db.collection('assets').doc(docId).set(docData);
+      persistedInFirestore = true;
+      console.log(`Asset metadata for doc ${docId} persisted in Firestore`);
+    } catch (fsErr) {
+      console.warn(`Firestore asset doc save failed for ${docId}:`, fsErr);
     }
 
     // Return the dynamic api URL so it works on Vercel
     const publicUrl = `/api/assets/${docId}`;
-    res.json({ success: true, url: publicUrl, persistedInFirestore, savedLocally });
+    res.json({ success: true, url: publicUrl, persistedInFirestore, uploadedToStorage, savedLocally });
   } catch (err: any) {
     console.error('File Upload Error:', err.stack || err);
     res.status(500).json({ error: err.message || 'Failed to save uploaded file', stack: err.stack || String(err) });
@@ -935,24 +969,75 @@ app.get('/api/assets/:id', async (req: Request, res: Response) => {
     const doc = await db.collection('assets').doc(docId).get();
     if (doc.exists) {
       const data = doc.data() as any;
-      const base64Str = data.base64;
       
-      const { contentType, buffer } = parseBase64DataUrl(base64Str);
-      
-      // Cache to local disk for future requests
-      try {
-        const mimeExt = contentType.split('/')[1] || 'png';
-        const ext = mimeExt === 'jpeg' ? '.jpg' : `.${mimeExt}`;
-        const localPath = path.join(uploadsDir, `${id}${ext}`);
-        fs.writeFileSync(localPath, buffer);
-        console.log(`Cached file from Firestore to local disk: ${id}${ext}`);
-      } catch (writeErr) {
-        console.error('Failed to cache file to disk:', writeErr);
+      let contentType = data.contentType || 'image/png';
+      let buffer: Buffer | null = null;
+
+      // Try reading inline base64 if available
+      if (data.base64) {
+        try {
+          const parsed = parseBase64DataUrl(data.base64);
+          contentType = parsed.contentType;
+          buffer = parsed.buffer;
+        } catch (e) {
+          console.error('Failed to parse inline base64 from Firestore document:', e);
+        }
       }
 
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-      return res.send(buffer);
+      // Try downloading from Firebase Storage if path is set and client is initialized
+      if (!buffer && data.storagePath && storage && !isStorageDisabled) {
+        try {
+          console.log(`Downloading ${data.storagePath} from Firebase Storage for asset ${docId}...`);
+          const fileRef = storageRef(storage, data.storagePath);
+          const arrayBuffer = await getBytes(fileRef);
+          buffer = Buffer.from(arrayBuffer);
+          console.log(`Successfully downloaded ${buffer.length} bytes from Firebase Storage.`);
+        } catch (storageErr) {
+          console.warn(`Failed to download from Firebase Storage for path ${data.storagePath} (will fall back to Firestore if available):`, storageErr);
+        }
+      }
+
+      // Fallback: If still no buffer, try checking potential paths on Storage
+      if (!buffer && storage && !isStorageDisabled) {
+        const possiblePaths = [`assets/${id}`];
+        if (data.name) {
+          possiblePaths.push(`assets/${data.name}`);
+        }
+        for (const sPath of possiblePaths) {
+          try {
+            console.log(`Trying fallback download from Firebase Storage path: ${sPath}`);
+            const fileRef = storageRef(storage, sPath);
+            const arrayBuffer = await getBytes(fileRef);
+            buffer = Buffer.from(arrayBuffer);
+            console.log(`Successfully retrieved fallback from Firebase Storage.`);
+            break;
+          } catch (e) {
+            // Silently try next path
+          }
+        }
+      }
+
+      if (buffer) {
+        // Cache to local disk for future requests
+        try {
+          const mimeExt = contentType.split('/')[1] || 'png';
+          const ext = mimeExt === 'jpeg' ? '.jpg' : `.${mimeExt}`;
+          const localPath = path.join(uploadsDir, `${id}${ext}`);
+          if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+          }
+          fs.writeFileSync(localPath, buffer);
+          console.log(`Cached file from Firestore/Storage to local disk: ${id}${ext}`);
+        } catch (writeErr) {
+          console.error('Failed to cache file to disk:', writeErr);
+        }
+
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        return res.send(buffer);
+      } else {
+        return res.status(404).send('Data buffer could not be retrieved');
+      }
     } else {
       res.status(404).send('Not found');
     }
@@ -2017,9 +2102,9 @@ app.get('/sitemap.xml', (req: Request, res: Response) => {
 </urlset>`);
 });
 
-// Startup task to back up local images to Firestore so they are preserved across serverless deployments (like Vercel)
+// Startup task to back up local images to Firestore & Firebase Storage so they are preserved across serverless deployments (like Vercel)
 async function backupLocalImagesToFirestore() {
-  console.log('Running automatic startup backup of local images to Firestore...');
+  console.log('Running automatic startup backup of local images to Firestore & Firebase Storage...');
   const directoriesToScan = [
     { dir: publicDir },
     { dir: uploadsDir }
@@ -2041,26 +2126,55 @@ async function backupLocalImagesToFirestore() {
         // Extract doc ID
         const docId = path.basename(file, ext);
         
-        // Check if already in Firestore
+        let mime = 'image/png';
+        if (ext === '.jpg' || ext === '.jpeg') mime = 'image/jpeg';
+        else if (ext === '.gif') mime = 'image/gif';
+        else if (ext === '.webp') mime = 'image/webp';
+        else if (ext === '.svg') mime = 'image/svg+xml';
+
+        // Check if already in Firestore or storage
         try {
           const docSnap = await db.collection('assets').doc(docId).get();
+          const buffer = fs.readFileSync(filePath);
+          
+          let uploadedToStorage = false;
+          if (storage && !isStorageDisabled) {
+            try {
+              const fileRef = storageRef(storage, `assets/${file}`);
+              await uploadBytes(fileRef, buffer, { contentType: mime });
+              uploadedToStorage = true;
+              console.log(`Successfully backed up local file ${file} to Firebase Storage.`);
+            } catch (storageErr) {
+              isStorageDisabled = true;
+              console.warn(`Firebase Storage is not enabled or permission is denied. Skipping Storage backups and gracefully using Firestore document backup. Info:`, storageErr);
+            }
+          }
+
           if (!docSnap.exists) {
-            console.log(`Local file ${file} is missing from Firestore. Backing up...`);
-            const buffer = fs.readFileSync(filePath);
+            console.log(`Local file ${file} is missing from Firestore. Backing up metadata...`);
             const base64Data = buffer.toString('base64');
-            let mime = 'image/png';
-            if (ext === '.jpg' || ext === '.jpeg') mime = 'image/jpeg';
-            else if (ext === '.gif') mime = 'image/gif';
-            else if (ext === '.webp') mime = 'image/webp';
-            else if (ext === '.svg') mime = 'image/svg+xml';
 
-            const base64 = `data:${mime};base64,${base64Data}`;
+            const docData: any = {
+              name: file,
+              contentType: mime,
+              storagePath: uploadedToStorage ? `assets/${file}` : null,
+              updatedAt: new Date().toISOString()
+            };
 
-            if (base64.length <= 1040000) {
-              await db.collection('assets').doc(docId).set({ base64, name: file });
-              console.log(`Successfully backed up local file ${file} to Firestore assets collection.`);
-            } else {
-              console.warn(`Local file ${file} is too large (${base64.length} chars base64) to backup to Firestore directly.`);
+            if (base64Data.length <= 1040000) {
+              docData.base64 = `data:${mime};base64,${base64Data}`;
+            }
+
+            await db.collection('assets').doc(docId).set(docData);
+            console.log(`Successfully backed up local file ${file} to Firestore assets collection.`);
+          } else {
+            // Document exists, but maybe we want to update the storagePath if we uploaded it now
+            const data = docSnap.data() as any;
+            if (uploadedToStorage && !data.storagePath) {
+              await db.collection('assets').doc(docId).set({
+                storagePath: `assets/${file}`
+              }, { merge: true });
+              console.log(`Updated Firestore document ${docId} with storage path.`);
             }
           }
         } catch (dbErr) {
