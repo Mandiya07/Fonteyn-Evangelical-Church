@@ -143,8 +143,41 @@ export default function AdminDashboard({ language }: AdminDashboardProps) {
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
-  const { uploadFile } = useAppImages();
+  const { uploadFile, refreshImages } = useAppImages();
   const [uploadingField, setUploadingField] = useState<string | null>(null);
+
+  const fetchData = async () => {
+    const url = getTabUrl(activeTab);
+    if (!url) {
+      setItems([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`${url}?_t=${Date.now()}`);
+      const data = await res.json();
+      setItems(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error(`Error loading database for tab ${activeTab}:`, err);
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForceRefresh = async () => {
+    localStorage.clear();
+    setLoading(true);
+    try {
+      await refreshImages();
+      await fetchData();
+    } catch (err) {
+      console.error("Error during force refresh", err);
+      alert("Failed to refresh data.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleImageUpload = async (fieldName: string, file: File) => {
     setUploadingField(fieldName);
@@ -196,23 +229,7 @@ export default function AdminDashboard({ language }: AdminDashboardProps) {
 
   // Fetch items for specific tab
   useEffect(() => {
-    const url = getTabUrl(activeTab);
-    if (!url) {
-      setItems([]);
-      return;
-    }
-    setLoading(true);
-    fetch(url)
-      .then(res => res.json())
-      .then(data => {
-        setItems(Array.isArray(data) ? data : []);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error(`Error loading database for tab ${activeTab}:`, err);
-        setItems([]);
-        setLoading(false);
-      });
+    fetchData();
   }, [activeTab]);
 
   // Load Overview Metrics dynamically from APIs
@@ -630,6 +647,13 @@ export default function AdminDashboard({ language }: AdminDashboardProps) {
           
           {activeTab === 'overview' && (
             <div className="animate-fade-in space-y-8">
+               <button
+                onClick={handleForceRefresh}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition"
+              >
+                <Activity className="w-4 h-4" />
+                Force Refresh
+              </button>
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                  {[
                    { label: 'Registered Members', value: statsData.members, icon: <Users className="w-5 h-5" />, trend: 'Eswatini Registry' },
