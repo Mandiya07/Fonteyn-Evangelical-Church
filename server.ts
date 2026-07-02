@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { initializeApp } from 'firebase/app';
 import { 
   getFirestore, 
+  initializeFirestore,
   collection, 
   doc, 
   getDoc, 
@@ -34,11 +35,20 @@ const firebaseApp = firebaseConfig?.apiKey ? initializeApp({
   appId: firebaseConfig.appId,
 }) : null;
 
-const clientDb = firebaseApp
-  ? (firebaseConfig.firestoreDatabaseId 
-     ? getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId)
-     : getFirestore(firebaseApp))
-  : null;
+let clientDb: any = null;
+if (firebaseApp) {
+  try {
+    const settings = { experimentalForceLongPolling: true };
+    clientDb = firebaseConfig.firestoreDatabaseId 
+      ? initializeFirestore(firebaseApp, settings, firebaseConfig.firestoreDatabaseId)
+      : initializeFirestore(firebaseApp, settings);
+  } catch (err) {
+    console.warn("Firestore already initialized or failed to initialize with settings. Falling back to getFirestore:", err);
+    clientDb = firebaseConfig.firestoreDatabaseId 
+      ? getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId)
+      : getFirestore(firebaseApp);
+  }
+}
 
 console.log('Firebase Client SDK initialized:', !!clientDb);
 
