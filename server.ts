@@ -857,9 +857,9 @@ app.post('/api/images/upload', async (req: Request, res: Response) => {
     const fileSize = buffer.length;
     console.log(`Uploaded file size: ${fileSize} bytes`);
 
-    // Only store in Firestore if it fits within safe Firestore boundaries (< 600KB base64 string)
+    // Only store in Firestore if it fits within safe Firestore boundaries (< 1MB base64 string)
     let persistedInFirestore = false;
-    if (base64.length <= 800000) {
+    if (base64.length <= 1040000) {
       try {
         await db.collection('assets').doc(docId).set({ base64, name: sanitizedName });
         persistedInFirestore = true;
@@ -868,7 +868,7 @@ app.post('/api/images/upload', async (req: Request, res: Response) => {
         console.warn(`Firestore backup failed (will still work locally and in memory):`, fsErr);
       }
     } else {
-      console.log(`File size is too large for Firestore backup. Skipping Firestore persistence.`);
+      console.log(`File size is too large for Firestore backup (${base64.length} chars). Skipping Firestore persistence.`);
     }
 
     // Return the dynamic api URL so it works on Vercel
@@ -904,6 +904,29 @@ app.get('/api/assets/:id', async (req: Request, res: Response) => {
         }
       } catch (dirErr) {
         console.error('Failed reading uploads directory:', dirErr);
+      }
+    }
+
+    // Also try to look in the main public directory
+    if (fs.existsSync(publicDir)) {
+      try {
+        const files = fs.readdirSync(publicDir);
+        const matchedFile = files.find(f => f.startsWith(id));
+        if (matchedFile) {
+          const localPath = path.join(publicDir, matchedFile);
+          const ext = path.extname(matchedFile).toLowerCase();
+          let contentType = 'image/png';
+          if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+          else if (ext === '.gif') contentType = 'image/gif';
+          else if (ext === '.webp') contentType = 'image/webp';
+          else if (ext === '.svg') contentType = 'image/svg+xml';
+          
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          return res.sendFile(localPath);
+        }
+      } catch (dirErr) {
+        console.error('Failed reading public directory:', dirErr);
       }
     }
 
@@ -1994,10 +2017,73 @@ app.get('/sitemap.xml', (req: Request, res: Response) => {
 </urlset>`);
 });
 
+// Startup task to back up local images to Firestore so they are preserved across serverless deployments (like Vercel)
+async function backupLocalImagesToFirestore() {
+  console.log('Running automatic startup backup of local images to Firestore...');
+  const directoriesToScan = [
+    { dir: publicDir },
+    { dir: uploadsDir }
+  ];
+
+  for (const { dir } of directoriesToScan) {
+    if (!fs.existsSync(dir)) continue;
+    try {
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        const filePath = path.join(dir, file);
+        const stat = fs.statSync(filePath);
+        
+        // Skip directories and non-image files
+        if (stat.isDirectory()) continue;
+        const ext = path.extname(file).toLowerCase();
+        if (!['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'].includes(ext)) continue;
+
+        // Extract doc ID
+        const docId = path.basename(file, ext);
+        
+        // Check if already in Firestore
+        try {
+          const docSnap = await db.collection('assets').doc(docId).get();
+          if (!docSnap.exists) {
+            console.log(`Local file ${file} is missing from Firestore. Backing up...`);
+            const buffer = fs.readFileSync(filePath);
+            const base64Data = buffer.toString('base64');
+            let mime = 'image/png';
+            if (ext === '.jpg' || ext === '.jpeg') mime = 'image/jpeg';
+            else if (ext === '.gif') mime = 'image/gif';
+            else if (ext === '.webp') mime = 'image/webp';
+            else if (ext === '.svg') mime = 'image/svg+xml';
+
+            const base64 = `data:${mime};base64,${base64Data}`;
+
+            if (base64.length <= 1040000) {
+              await db.collection('assets').doc(docId).set({ base64, name: file });
+              console.log(`Successfully backed up local file ${file} to Firestore assets collection.`);
+            } else {
+              console.warn(`Local file ${file} is too large (${base64.length} chars base64) to backup to Firestore directly.`);
+            }
+          }
+        } catch (dbErr) {
+          console.error(`Error checking/backing up ${file} to Firestore:`, dbErr);
+        }
+      }
+    } catch (err) {
+      console.error(`Failed to scan directory ${dir} for backups:`, err);
+    }
+  }
+}
+
 // Configure Vite or Static Serve
 async function startServer() {
   // Load persistent configurations from Firestore on startup
   await loadPersistentConfig();
+
+  // Run the automatic backup task
+  try {
+    await backupLocalImagesToFirestore();
+  } catch (backupErr) {
+    console.error('Error running backupLocalImagesToFirestore:', backupErr);
+  }
 
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

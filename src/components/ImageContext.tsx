@@ -125,33 +125,81 @@ export function ImageProvider({ children }: { children: React.ReactNode }) {
     return false;
   };
 
-  const uploadFile = async (file: File): Promise<string | null> => {
-    return new Promise((resolve) => {
+  const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 0.8): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      // SVGs shouldn't be compressed via Canvas as they are vector graphic XML
+      if (file.type === 'image/svg+xml') {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(file);
+        return;
+      }
+
       const reader = new FileReader();
-      reader.onloadend = async () => {
-        try {
-          const base64 = reader.result as string;
-          const res = await fetch('/api/images/upload', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: file.name, base64 }),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            resolve(data.url);
-          } else {
-            const errorData = await res.json().catch(() => ({}));
-            console.error('Upload API failure:', errorData);
-            resolve(null);
-          }
-        } catch (err) {
-          console.error('Upload API failure:', err);
-          resolve(null);
-        }
-      };
-      reader.onerror = () => resolve(null);
       reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(event.target?.result as string);
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Force JPEG compression for compact base64 data
+          const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+          console.log(`Compressed image "${file.name}" from original size to ${Math.round(compressedBase64.length * 0.75 / 1024)} KB`);
+          resolve(compressedBase64);
+        };
+        img.onerror = (err) => reject(err);
+      };
+      reader.onerror = (err) => reject(err);
     });
+  };
+
+  const uploadFile = async (file: File): Promise<string | null> => {
+    try {
+      console.log(`Compressing and uploading: ${file.name}`);
+      const base64 = await compressImage(file);
+      const res = await fetch('/api/images/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: file.name, base64 }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.url;
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        console.error('Upload API failure:', errorData);
+        return null;
+      }
+    } catch (err) {
+      console.error('Upload failed:', err);
+      return null;
+    }
   };
 
   return (
