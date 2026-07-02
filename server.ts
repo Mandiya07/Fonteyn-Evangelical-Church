@@ -664,19 +664,6 @@ let appImages: Record<string, string> = {
 
 function sanitizeServerImages(images: Record<string, string>): Record<string, string> {
   const sanitized = { ...images };
-  for (const key of Object.keys(sanitized)) {
-    const val = sanitized[key];
-    if (typeof val === 'string') {
-      if (
-        val.includes('unsplash.com') ||
-        val.includes('pastor_portrait') ||
-        val.includes('placeholder') ||
-        val.includes('/pastor_')
-      ) {
-        sanitized[key] = '';
-      }
-    }
-  }
   return sanitized;
 }
 
@@ -794,8 +781,7 @@ app.post('/api/images/update', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Key and active URL string are required.' });
   }
   
-  const isPlaceholder = url.includes('unsplash.com') || url.includes('pastor_portrait') || url.includes('placeholder') || url.includes('/pastor_');
-  appImages[key] = isPlaceholder ? '' : url;
+  appImages[key] = url;
   await saveImageConfig();
   res.json({ success: true, images: appImages });
 });
@@ -875,8 +861,8 @@ app.post('/api/images/upload', async (req: Request, res: Response) => {
       console.log(`File size is too large for Firestore backup. Skipping Firestore persistence.`);
     }
 
-    // Return the local static URL: /uploads/${filename}
-    const publicUrl = `/uploads/${filename}`;
+    // Return the dynamic api URL so it works on Vercel
+    const publicUrl = `/api/assets/${docId}`;
     res.json({ success: true, url: publicUrl, persistedInFirestore, savedLocally });
   } catch (err: any) {
     console.error('File Upload Error:', err.stack || err);
@@ -912,7 +898,8 @@ app.get('/api/assets/:id', async (req: Request, res: Response) => {
     }
 
     // 2. Fallback: Fetch from Firestore assets collection
-    const doc = await db.collection('assets').doc(id).get();
+    const docId = id.replace(/\.[^/.]+$/, ""); // strip extension if present
+    const doc = await db.collection('assets').doc(docId).get();
     if (doc.exists) {
       const data = doc.data() as any;
       const base64Str = data.base64;
@@ -1728,6 +1715,10 @@ The response MUST be a single structured JSON object.`;
 });
 
 app.get('/api/ai/daily-scripture', async (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  
   const lang = (req.query.lang as string) || 'en';
   const forceRefresh = req.query.refresh === 'true';
   const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD

@@ -49,14 +49,7 @@ function sanitizeAppImages(data: any): AppImages {
   for (const key of Object.keys(sanitized)) {
     const val = sanitized[key];
     if (typeof val === 'string') {
-      if (
-        val.includes('unsplash.com') ||
-        val.includes('pastor_portrait') ||
-        val.includes('placeholder') ||
-        val.includes('/pastor_')
-      ) {
-        sanitized[key] = '';
-      } else if (val) {
+      if (val) {
         try {
           if (val.startsWith('http://') || val.startsWith('https://')) {
             const parsed = new URL(val);
@@ -99,30 +92,28 @@ export function ImageProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateMapping = async (key: string, url: string): Promise<boolean> => {
-    const isPlaceholder = url.includes('unsplash.com') || url.includes('pastor_portrait') || url.includes('placeholder') || url.includes('/pastor_');
-    const finalUrl = isPlaceholder ? '' : url;
     try {
       const res = await fetch('/api/images/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, url: finalUrl }),
+        body: JSON.stringify({ key, url }),
       });
       if (res.ok) {
         let busterUrl = '';
-        if (finalUrl) {
+        if (url) {
           const cb = Date.now().toString();
           try {
-            if (finalUrl.startsWith('http://') || finalUrl.startsWith('https://')) {
-              const urlObj = new URL(finalUrl);
+            if (url.startsWith('http://') || url.startsWith('https://')) {
+              const urlObj = new URL(url);
               urlObj.searchParams.set('cb', cb);
               busterUrl = urlObj.toString();
             } else {
-              const separator = finalUrl.includes('?') ? '&' : '?';
-              busterUrl = `${finalUrl}${separator}cb=${cb}`;
+              const separator = url.includes('?') ? '&' : '?';
+              busterUrl = `${url}${separator}cb=${cb}`;
             }
           } catch (e) {
-            const separator = finalUrl.includes('?') ? '&' : '?';
-            busterUrl = `${finalUrl}${separator}cb=${cb}`;
+            const separator = url.includes('?') ? '&' : '?';
+            busterUrl = `${url}${separator}cb=${cb}`;
           }
         }
         setImages(prev => ({ ...prev, [key]: busterUrl }));

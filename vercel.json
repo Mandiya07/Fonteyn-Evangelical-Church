@@ -15,6 +15,10 @@
   ],
   "routes": [
     {
+      "src": "/uploads/(.*)",
+      "dest": "server.ts"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "server.ts"
     },

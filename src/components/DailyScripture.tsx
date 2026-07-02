@@ -22,7 +22,7 @@ export default function DailyScripture({ language }: DailyScriptureProps) {
     setIsLoading(true);
     setError('');
     try {
-      const url = `/api/ai/daily-scripture?lang=${language === 'en' ? 'en' : 'swati'}${forceRefresh ? '&refresh=true' : ''}`;
+      const url = `/api/ai/daily-scripture?lang=${language === 'en' ? 'en' : 'swati'}${forceRefresh ? '&refresh=true' : ''}&_t=${Date.now()}`;
       const res = await fetch(url);
       if (!res.ok) {
         throw new Error('Failed to fetch scripture');
