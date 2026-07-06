@@ -1615,7 +1615,12 @@ Answer directly, warmly, and use a faithful, humble Christian tone. You can occa
     const response = await chat.sendMessage({ message });
     res.json({ reply: response.text });
   } catch (err: any) {
-    console.error('Gemini Chat Error:', err);
+    const isQuotaError = String(err).includes('429') || String(err).includes('quota') || String(err).includes('RESOURCE_EXHAUSTED');
+    if (isQuotaError) {
+      console.log('[Quota Info] Gemini Chat rate limited or quota exceeded. Returning helpful local FAQ answers.');
+    } else {
+      console.log('[Info] Gemini Chat fallback triggered:', err?.message || err);
+    }
     // Supply a highly helpful fallback response in case the API key is not yet set
     res.json({
       reply: `Ngiyanemukela! Thank you for reaching out to Fonteyn Evangelical Church. 
@@ -1665,7 +1670,12 @@ Output ONLY the raw JSON block. No markdown, no explanation wrappers.`;
     const result = JSON.parse(response.text?.trim() || '{}');
     res.json(result);
   } catch (err: any) {
-    console.error('Sermon Assistant Error:', err);
+    const isQuotaError = String(err).includes('429') || String(err).includes('quota') || String(err).includes('RESOURCE_EXHAUSTED');
+    if (isQuotaError) {
+      console.log('[Quota Info] Sermon Assistant rate limited or quota exceeded. Returning beautiful local structured sermon study guides.');
+    } else {
+      console.log('[Info] Sermon Assistant fallback triggered:', err?.message || err);
+    }
     // Return high-quality, simulated fallback structures matching the JSON schema
     res.json({
       summary: `This message explores the profound necessity of centering our life choices on the eternal, infallible words of Jesus Christ rather than shifting societal standards. Inspired by ${scripture || 'Scriptures'}.`,
@@ -1703,7 +1713,12 @@ app.post('/api/ai/translate', async (req: Request, res: Response) => {
 
     res.json({ translatedText: response.text?.trim() });
   } catch (err: any) {
-    console.error('Translate Error:', err);
+    const isQuotaError = String(err).includes('429') || String(err).includes('quota') || String(err).includes('RESOURCE_EXHAUSTED');
+    if (isQuotaError) {
+      console.log('[Quota Info] Translate rate limited or quota exceeded. Using elegant local fallback dictionary.');
+    } else {
+      console.log('[Info] Translate fallback triggered:', err?.message || err);
+    }
     // Provide a simple local translation fallback dictionary or clean simulation
     const fallbacks: { [key: string]: string } = {
       "Welcome to Fonteyn Evangelical Church": "Ngiyanemukela eFonteyn Evangelical Church",
@@ -1801,32 +1816,88 @@ The response MUST be a single structured JSON object.`;
     return res.json(devData);
 
   } catch (err: any) {
-    console.error('Error generating daily devotional:', err);
+    const isQuotaError = String(err).includes('429') || String(err).includes('quota') || String(err).includes('RESOURCE_EXHAUSTED');
+    if (isQuotaError) {
+      console.log('[Quota Info] Daily devotional generation skipped or rate-limited. Returning beautiful, dynamic local fallback.');
+    } else {
+      console.log('[Info] Daily devotional fallback used:', err?.message || err);
+    }
 
-    // Fallbacks
-    const fallbackEnglish = {
-      title: "Abiding in His Love",
-      scripture: "John 15:5",
-      scriptureText: "I am the vine, you are the branches. He who abides in Me, and I in him, bears much fruit; for without Me you can do nothing.",
-      thought: "In the fast-paced rhythm of our daily lives, it is so easy to drift into self-reliance. We strive, we plan, and we exhaust ourselves, forgetting that our true strength and spiritual vitality come solely from our connection to Jesus Christ. Just as a branch cannot bear fruit by itself, we cannot live a fruitful, peace-filled life apart from Him. Abiding is not a call to passive laziness, but an active resting, a conscious turning of our minds and hearts to the Lord in prayer, worship, and obedience throughout our day. Today, let us take a moment to pause, breathe, and consciously align our steps with the Vine, knowing that in Him, our lives will bear lasting fruit.",
-      prayer: "Lord Jesus, help me to abide in You today. Forgive me for the times I try to carry my burdens alone, and teach me to rest in Your strength and love. Amen.",
-      reflectionQuestion: "What is one area of your life today where you need to stop self-striving and instead trust in the Lord's strength?",
-      date: todayStr,
-      lang: 'en',
-      isFallback: true
-    };
+    const fallbackEnglishList = [
+      {
+        title: "Abiding in His Love",
+        scripture: "John 15:5",
+        scriptureText: "I am the vine, you are the branches. He who abides in Me, and I in him, bears much fruit; for without Me you can do nothing.",
+        thought: "In the fast-paced rhythm of our daily lives, it is so easy to drift into self-reliance. We strive, we plan, and we exhaust ourselves, forgetting that our true strength and spiritual vitality come solely from our connection to Jesus Christ. Just as a branch cannot bear fruit by itself, we cannot live a fruitful, peace-filled life apart from Him. Abiding is not a call to passive laziness, but an active resting, a conscious turning of our minds and hearts to the Lord in prayer, worship, and obedience throughout our day. Today, let us take a moment to pause, breathe, and consciously align our steps with the Vine, knowing that in Him, our lives will bear lasting fruit.",
+        prayer: "Lord Jesus, help me to abide in You today. Forgive me for the times I try to carry my burdens alone, and teach me to rest in Your strength and love. Amen.",
+        reflectionQuestion: "What is one area of your life today where you need to stop self-striving and instead trust in the Lord's strength?",
+        date: todayStr,
+        lang: 'en',
+        isFallback: true
+      },
+      {
+        title: "The Peace of His Presence",
+        scripture: "Philippians 4:6-7",
+        scriptureText: "Be anxious for nothing, but in everything by prayer and supplication, with thanksgiving, let your requests be made known to God; and the peace of God, which surpasses all understanding, will guard your hearts and minds through Christ Jesus.",
+        thought: "Anxiety is a common companion in our modern world, pulling our attention in a hundred different directions. Yet, scripture invites us to trade our heavy burdens of anxiety for the perfect, transcendent peace of God. This trade happens in the place of prayer. When we bring our requests to Him with a heart of gratitude, we acknowledge that He is sovereign and good. We do not have to figure out every detail of our future today. We can rest in the knowledge that His peace is guarding our hearts like a sentinel, protecting us from fear.",
+        prayer: "Heavenly Father, I hand over all my worries and fears to You today. Fill my heart with Your supernatural peace that guards my thoughts in Christ Jesus. Amen.",
+        reflectionQuestion: "What is the primary anxiety you need to release to God in prayer right now?",
+        date: todayStr,
+        lang: 'en',
+        isFallback: true
+      },
+      {
+        title: "The Strength of Quietness",
+        scripture: "Isaiah 30:15",
+        scriptureText: "In returning and rest you shall be saved; in quietness and confidence shall be your strength.",
+        thought: "We live in a culture that celebrates constant noise, activity, and hustle. We are told that our worth is defined by our productivity. However, God's kingdom operates on a completely different principle. True spiritual strength is not found in endless striving, but in returning to God and resting in His presence. It is in the quietness of our hearts and the unshakeable confidence in His character that we find the capacity to endure and thrive. Today, take a few minutes to step away from the noise and find rest in the quietness of God's love.",
+        prayer: "Father, teach me the beauty of quietness. Help me to quiet my soul before You and find my strength in Your unshakeable love. Amen.",
+        reflectionQuestion: "How can you carve out 5 minutes of intentional silence to rest in God's presence today?",
+        date: todayStr,
+        lang: 'en',
+        isFallback: true
+      }
+    ];
 
-    const fallbackSwati = {
-      title: "Kuhlala Oliveni Lweliciniso",
-      scripture: "Johane 15:5",
-      scriptureText: "Ngingulofosela welivini, nina nitigaba. Lowo lohlala kumbe, nami ngihlale kuye, utsela titselo letinyenti; ngobe ngaphandle kwami ngeke nente lutfo.",
-      thought: "Ekuphileni kwetfu kwamalanga onkhe, kulula kakhulu kutsi tetsembe tsine. Siyesuka ekutseni sitsembe Nkulunkulu, sibe matasa ngekuhlela nangekutikhokhobisa ngemandla etfu. Kodvwa Livi laNkulunkulu lisikhumbuta kutsi emandla etfu emoya nempilo yetfu ivela kuphela ngekuhlala kuJesu Khristu. Njengobe ligatja lingeke litsela titselo lodvwa, natsi ngeke sibe nekuphila lokunokuthula netitselo letinhle ngaphandle kwakhe. Kuhlala Kuye kusho kuthantaza, kumlalela, kanye nekuhamba naYe onkhe malanga. Lamuhla, asime kancane, sitsatse umoya, simeme Jesu kutsi abe sisekelo sako konkhe lesikwentako.",
-      prayer: "Nkhosi Jesu, ngisite ngihlale kuWe lamuhla. Ngitsetselele lapho ngitsemba khona emandla ami, ungifundzise kuncika kuWe. Amen.",
-      reflectionQuestion: "Ngukuphi luhlangotsi lwekuphila kwakho lamuhla lapho ubona khona kutsi ube wetsemba emandla akho kunekwetsemba Nkhosi?",
-      date: todayStr,
-      lang: 'swati',
-      isFallback: true
-    };
+    const fallbackSwatiList = [
+      {
+        title: "Kuhlala Oliveni Lweliciniso",
+        scripture: "Johane 15:5",
+        scriptureText: "Ngingulofosela welivini, nina nitigaba. Lowo lohlala kumbe, nami ngihlale kuye, utsela titselo letinyenti; ngobe ngaphandle kwami ngeke nente lutfo.",
+        thought: "Ekuphileni kwetfu kwamalanga onkhe, kulula kakhulu kutsi tetsembe tsine. Siyesuka ekutseni sitsembe Nkulunkulu, sibe matasa ngekuhlela nangekutikhokhobisa ngemandla etfu. Kodvwa Livi laNkulunkulu lisikhumbuta kutsi emandla etfu emoya nempilo yetfu ivela kuphela ngekuhlala kuJesu Khristu. Njengobe ligatja lingeke litsela titselo lodvwa, natsi ngeke sibe nekuphila lokunokuthula netitselo letinhle ngaphandle kwakhe. Kuhlala Kuye kusho kuthantaza, kumlalela, kanye nekuhamba naYe onkhe malanga. Lamuhla, asime kancane, sitsatse umoya, simeme Jesu kutsi abe sisekelo sako konkhe lesikwentako.",
+        prayer: "Nkhosi Jesu, ngisite ngihlale kuWe lamuhla. Ngitsetselele lapho ngitsemba khona emandla ami, ungifundzise kuncika kuWe. Amen.",
+        reflectionQuestion: "Ngukuphi luhlangotsi lwekuphila kwakho lamuhla lapho ubona khona kutsi ube wetsemba emandla akho kunekwetsemba Nkhosi?",
+        date: todayStr,
+        lang: 'swati',
+        isFallback: true
+      },
+      {
+        title: "Kuthula Kwekuba Mbikwakhe",
+        scripture: "KubaseFilipi 4:6-7",
+        scriptureText: "Ningakhatseki ngalutfo, kodvwa emitthandazweni yenu ngaso sonkhe sikhatsi layikhonze kuNkulunkulu ngekuthantaza nekuncenga kanye nekuBonga.",
+        thought: "Kukhatseka kuyasihlupha kakhulu emhlabeni walamuhla, kusidvonsela etindleleni letinyenti letahlukene. Kodvwa Livi laNkulunkulu lisimema kutsi sishintjanise imitfalo yetfu yekukhatseka nekuthula lokuphakeme kwaNkulunkulu. Loku kwenteka emthandazweni. Uma siletha ticelo tetfu Kuye ngenhliziyo lengekubonga, sivuma kutsi unguSomandla futsi ulungile. Akudzingeki kutsi sati yonkhe imininingwane yakusasa lamuhla. Singaphumula sisekwatini kutsi kuthula kwakhe kuyayigada tinhliziyo tetfu.",
+        prayer: "Babe wasezulwini, nginikela tonkhe tibonelo nekukhatseka kwami kuWe lamuhla. Gwalisa inhliziyo yami ngekuthula kwakho lokuphakeme lokugada imicondvo yami kuKhristu Jesu. Amen.",
+        reflectionQuestion: "Ngukuphi kukhatseka lokuphambili lokudzinga ukukukhulula kuNkulunkulu emthandazweni nyalo?",
+        date: todayStr,
+        lang: 'swati',
+        isFallback: true
+      },
+      {
+        title: "Emandla Ekuphumula",
+        scripture: "Isaya 30:15",
+        scriptureText: "Ngekubuyela nekutsula niyawusindziswa; ekuthuleni nekuphumuleni kuyawuba nemandla enu.",
+        thought: "Siphila esiveni lesigubha umsindo longasuki, imisebenti, kanye nekugijima kakhulu. Sitshelwa kutsi kubaluleka kwetfu kubonakala ngalokusikwentako. Kodvwa umbuso waNkulunkulu usebenta ngendlela lehluke ngokuphelele. Emandla emoya mbamba awatfolakali ekugijimeni longapheli, kodvwa ekubuyeleni kuNkulunkulu nasekuphumuleni mbikwakhe. Ekuthuleni kwetinhliziyo tetfu nasekwetsembeni similo sakhe ngulapho sitfola khona emandla. Lamuhla, tsatsa imizuzwana embalwa uphume emsindweni, utfole kuphumula elutsandvweni lwaNkulunkulu.",
+        prayer: "Babe, ngifundzise buhle bekuthula. Ngisite ngithulise umphefumulo wami phambi kwakho, ngitfole emandla ami elutsandvweni lwakho lolunganyakatiswa. Amen.",
+        reflectionQuestion: "Ungayitsatsa njani imizuzu lemihlanu yetuthula ngelitsandvo lamuhla kute uphumule mbikwakhe?",
+        date: todayStr,
+        lang: 'swati',
+        isFallback: true
+      }
+    ];
+
+    const dayIndex = new Date().getDate();
+    const fallbackEnglish = fallbackEnglishList[dayIndex % fallbackEnglishList.length];
+    const fallbackSwati = fallbackSwatiList[dayIndex % fallbackSwatiList.length];
 
     return res.json(lang === 'swati' ? fallbackSwati : fallbackEnglish);
   }
@@ -1904,26 +1975,86 @@ The response MUST be a single structured JSON object containing 'verse', 'text',
     return res.json(scriptureData);
 
   } catch (err: any) {
-    console.error('Error generating daily scripture:', err);
+    const isQuotaError = String(err).includes('429') || String(err).includes('quota') || String(err).includes('RESOURCE_EXHAUSTED');
+    if (isQuotaError) {
+      console.log('[Quota Info] Daily scripture generation skipped or rate-limited. Returning beautiful, dynamic local fallback.');
+    } else {
+      console.log('[Info] Daily scripture fallback used:', err?.message || err);
+    }
 
-    // Fallbacks
-    const fallbackEnglish = {
-      verse: "Philippians 4:13",
-      text: "I can do all things through Christ who strengthens me.",
-      message: "No matter what challenges you face today, remember that you are never alone. Christ is your ultimate source of strength, guiding your steps and giving you the courage to overcome every obstacle.",
-      date: todayStr,
-      lang: 'en',
-      isFallback: true
-    };
+    const fallbackEnglishList = [
+      {
+        verse: "Philippians 4:13",
+        text: "I can do all things through Christ who strengthens me.",
+        message: "No matter what challenges you face today, remember that you are never alone. Christ is your ultimate source of strength, guiding your steps and giving you the courage to overcome every obstacle.",
+        date: todayStr,
+        lang: 'en',
+        isFallback: true
+      },
+      {
+        verse: "Psalm 23:1",
+        text: "The Lord is my shepherd; I shall not want.",
+        message: "No matter what valleys you walk through today, trust that your Heavenly Shepherd is leading you with absolute care and provision. Rest in His green pastures and let Him restore your soul.",
+        date: todayStr,
+        lang: 'en',
+        isFallback: true
+      },
+      {
+        verse: "Isaiah 40:31",
+        text: "But those who wait on the Lord shall renew their strength; they shall mount up with wings like eagles, they shall run and not be weary, they shall walk and not faint.",
+        message: "When you feel exhausted and weary, turn your focus toward waiting on God. In His presence, there is a divine exchange of weakness for unshakeable spiritual strength that will lift you above your circumstances.",
+        date: todayStr,
+        lang: 'en',
+        isFallback: true
+      },
+      {
+        verse: "Proverbs 3:5-6",
+        text: "Trust in the Lord with all your heart, and lean not on your own understanding; in all your ways acknowledge Him, and He shall direct your paths.",
+        message: "Our human perspective is limited, but God sees the entire map of our lives. Relinquish your need to control and surrender your plans to Him today; He is already paving a smooth path forward for you.",
+        date: todayStr,
+        lang: 'en',
+        isFallback: true
+      }
+    ];
 
-    const fallbackSwati = {
-      verse: "KubaseFilipi 4:13",
-      text: "Nginemandla ekwenza tonkhe tintfo ngaKhristu longipha emandla.",
-      message: "Noma ngabe ngutiphi tinkinga lobhekana nato namuhla, khumbula kutsi awuwedwa. Khristu ungumtfombo wakho wemandla, uhola tinyatselo takho futsi ukupha sibindi sekveta tonkhe tinkinga.",
-      date: todayStr,
-      lang: 'swati',
-      isFallback: true
-    };
+    const fallbackSwatiList = [
+      {
+        verse: "KubaseFilipi 4:13",
+        text: "Nginemandla ekwenza tonkhe tintfo ngaKhristu longipha emandla.",
+        message: "Noma ngabe ngutiphi tinkinga lobhekana nato namuhla, khumbula kutsi awuwedwa. Khristu ungumtfombo wakho wemandla, uhola tinyatselo takho futsi ukupha sibindi sekveta tonkhe tinkinga.",
+        date: todayStr,
+        lang: 'swati',
+        isFallback: true
+      },
+      {
+        verse: "Tihlabelelo 23:1",
+        text: "Jehova ungumelusi wami, ngingeke ngeswele lutfo.",
+        message: "Noma ngabe ngutiphi tigodi lohamba kuto lamuhla, temba kutsi Melusi wakho wasezulwini ukuhola ngekunakekela nangekuphakela lokuphelele. Phumula emadlelweni akhe latalako futsi uvumele umphefumulo wakho uvuseleleke.",
+        date: todayStr,
+        lang: 'swati',
+        isFallback: true
+      },
+      {
+        verse: "Isaya 40:31",
+        text: "Kodvwa labalindzele Jehova bayawutfola emandla lamasha; bayawundiza ngetimpiko njengetinkozi, bagijime bangacubuki, bahambe bangadzandzabuki.",
+        message: "Uma utiva udzandzabukile futsi ukhatsele, gucula umcondvo wakho ekulindzeleni Nkulunkulu. Embikwakhe, kukhona emandla lamasha layawukuphakamisa ngetulu kwetimo.",
+        date: todayStr,
+        lang: 'swati',
+        isFallback: true
+      },
+      {
+        verse: "Tiphrofetho 3:5-6",
+        text: "Tsemba Jehova ngayo yonkhe inhliziyo yakho, unganciki kokucondza kwakho; mutisekele tindlela takho tonkhe, futsi Yena uyawucondzisa tindlela takho.",
+        message: "Kokucondza kwetfu kwebuntfu kunemikhawulo, kodvwa Nkulunkulu ubona lonkhe ibalave lekuphila kwetfu. Dedela kufisa kwakho kulawula tintfo, unikele tinhlelo takho Kuye lamuhla.",
+        date: todayStr,
+        lang: 'swati',
+        isFallback: true
+      }
+    ];
+
+    const dayIndex = new Date().getDate();
+    const fallbackEnglish = fallbackEnglishList[dayIndex % fallbackEnglishList.length];
+    const fallbackSwati = fallbackSwatiList[dayIndex % fallbackSwatiList.length];
 
     return res.json(lang === 'swati' ? fallbackSwati : fallbackEnglish);
   }
