@@ -806,6 +806,116 @@ app.post('/api/images/update', async (req: Request, res: Response) => {
   res.json({ success: true, images: appImages });
 });
 
+app.get('/api/assets', async (req: Request, res: Response) => {
+  try {
+    const list: any[] = [];
+    
+    // 1. Fetch from Firestore
+    try {
+      if (clientDb) {
+        const snapshot = await db.collection('assets').get();
+        snapshot.docs.forEach(docSnap => {
+          const d = docSnap.data();
+          list.push({
+            id: docSnap.id,
+            name: d.name || docSnap.id,
+            contentType: d.contentType || 'image/png',
+            updatedAt: d.updatedAt || new Date().toISOString(),
+            url: `/api/assets/${docSnap.id}`
+          });
+        });
+      }
+    } catch (fsErr) {
+      console.warn('Failed listing assets from Firestore:', fsErr);
+    }
+
+    // 2. Supplement from local uploads directory
+    if (fs.existsSync(uploadsDir)) {
+      try {
+        const files = fs.readdirSync(uploadsDir);
+        files.forEach(file => {
+          // If file is not already in list by starting name prefix, add it
+          const fileId = path.basename(file, path.extname(file));
+          if (!list.some(item => item.id === fileId || item.name === file)) {
+            const ext = path.extname(file).toLowerCase();
+            let contentType = 'image/png';
+            if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+            else if (ext === '.gif') contentType = 'image/gif';
+            else if (ext === '.webp') contentType = 'image/webp';
+            else if (ext === '.svg') contentType = 'image/svg+xml';
+            else if (ext === '.mp3') contentType = 'audio/mpeg';
+            else if (ext === '.wav') contentType = 'audio/wav';
+            else if (ext === '.pdf') contentType = 'application/pdf';
+
+            const stats = fs.statSync(path.join(uploadsDir, file));
+
+            list.push({
+              id: fileId,
+              name: file,
+              contentType,
+              updatedAt: stats.mtime.toISOString(),
+              url: `/api/assets/${fileId}`
+            });
+          }
+        });
+      } catch (dirErr) {
+        console.error('Failed reading uploads directory for asset listing:', dirErr);
+      }
+    }
+
+    // Sort by updatedAt descending
+    list.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    res.json(list);
+  } catch (err: any) {
+    console.error('Error listing assets:', err);
+    res.status(500).json({ error: 'Failed to list assets' });
+  }
+});
+
+app.delete('/api/assets/:id', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+    console.log(`Deleting asset ${id}...`);
+
+    // 1. Delete from Firestore
+    try {
+      if (clientDb) {
+        await db.collection('assets').doc(id).delete();
+      }
+    } catch (fsErr) {
+      console.warn(`Firestore delete failed for asset ${id}:`, fsErr);
+    }
+
+    // 2. Delete from local disk
+    if (fs.existsSync(uploadsDir)) {
+      try {
+        const files = fs.readdirSync(uploadsDir);
+        const matchedFile = files.find(f => f.startsWith(id));
+        if (matchedFile) {
+          const localPath = path.join(uploadsDir, matchedFile);
+          fs.unlinkSync(localPath);
+          console.log(`Deleted local file: ${matchedFile}`);
+        }
+      } catch (dirErr) {
+        console.error(`Failed deleting local file for asset ${id}:`, dirErr);
+      }
+    }
+
+    // 3. Delete from memory cache
+    inMemoryUploads.delete(id);
+    for (const [key] of inMemoryUploads.entries()) {
+      if (key.startsWith(id)) {
+        inMemoryUploads.delete(key);
+      }
+    }
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Error deleting asset:', err);
+    res.status(500).json({ error: 'Failed to delete asset' });
+  }
+});
+
 app.post('/api/images/upload', async (req: Request, res: Response) => {
   console.log('--- HIT /api/images/upload ---');
   let name = req.body?.name || req.body?.filename || req.body?.fileName || req.body?.title;
