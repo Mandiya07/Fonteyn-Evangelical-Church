@@ -28,8 +28,50 @@ import {
   QueryConstraint
 } from 'firebase/firestore';
 import firebaseConfig from './firebase-applet-config.json';
+import admin from 'firebase-admin';
+import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { getStorage as getAdminStorage } from 'firebase-admin/storage';
 
 console.log('Starting server...');
+
+// Initialize Firebase Admin SDK for bulletproof server-to-server operations
+let adminDb: any = null;
+let adminStorage: any = null;
+let isAdminInitialized = false;
+
+try {
+  const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+  const bucketName = firebaseConfig?.storageBucket || (firebaseConfig?.projectId ? `${firebaseConfig.projectId}.firebasestorage.app` : undefined);
+
+  if (serviceAccountKey) {
+    const serviceAccount = JSON.parse(serviceAccountKey);
+    const adminApp = admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      storageBucket: bucketName
+    }, 'admin-app');
+    adminDb = firebaseConfig?.firestoreDatabaseId 
+      ? getAdminFirestore(adminApp, firebaseConfig.firestoreDatabaseId)
+      : getAdminFirestore(adminApp);
+    adminStorage = getAdminStorage(adminApp);
+    isAdminInitialized = true;
+    console.log('Firebase Admin SDK initialized successfully via FIREBASE_SERVICE_ACCOUNT_KEY env variable.');
+  } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    const adminApp = admin.initializeApp({
+      credential: admin.credential.applicationDefault(),
+      storageBucket: bucketName
+    }, 'admin-app');
+    adminDb = firebaseConfig?.firestoreDatabaseId 
+      ? getAdminFirestore(adminApp, firebaseConfig.firestoreDatabaseId)
+      : getAdminFirestore(adminApp);
+    adminStorage = getAdminStorage(adminApp);
+    isAdminInitialized = true;
+    console.log('Firebase Admin SDK initialized successfully via GOOGLE_APPLICATION_CREDENTIALS env variable.');
+  } else {
+    console.log('No Admin SDK credentials provided (FIREBASE_SERVICE_ACCOUNT_KEY or GOOGLE_APPLICATION_CREDENTIALS). Relying purely on Firebase Client SDK.');
+  }
+} catch (adminErr: any) {
+  console.warn('Firebase Admin SDK failed to initialize. Falling back to Client SDK:', adminErr.message);
+}
 
 // Initialize Client Firebase App
 const firebaseApp = firebaseConfig?.apiKey ? initializeApp({
@@ -64,21 +106,47 @@ let isStorageDisabled = false;
 
 const db = {
   collection(collectionName: string) {
-    let constraints: QueryConstraint[] = [];
+    let clientConstraints: QueryConstraint[] = [];
+    let adminQueryBuilder: any = adminDb ? adminDb.collection(collectionName) : null;
     
-    return {
+    const wrapper = {
       orderBy(field: string, direction: 'asc' | 'desc' = 'asc') {
-        constraints.push(orderBy(field, direction));
+        clientConstraints.push(orderBy(field, direction));
+        if (adminQueryBuilder) {
+          adminQueryBuilder = adminQueryBuilder.orderBy(field, direction);
+        }
         return this;
       },
       limit(n: number) {
-        constraints.push(limit(n));
+        clientConstraints.push(limit(n));
+        if (adminQueryBuilder) {
+          adminQueryBuilder = adminQueryBuilder.limit(n);
+        }
         return this;
       },
       async get() {
+        if (adminDb && adminQueryBuilder) {
+          try {
+            const snapshot = await adminQueryBuilder.get();
+            return {
+              empty: snapshot.empty,
+              size: snapshot.size,
+              docs: snapshot.docs.map((docSnap: any) => ({
+                id: docSnap.id,
+                ref: docSnap.ref,
+                data() {
+                  return docSnap.data();
+                }
+              }))
+            };
+          } catch (adminErr: any) {
+            console.warn(`Admin query failed for collection ${collectionName}, falling back to Client query:`, adminErr.message);
+          }
+        }
+        
         if (!clientDb) throw new Error("Firestore client is not initialized.");
         const colRef = collection(clientDb, collectionName);
-        const q = constraints.length > 0 ? query(colRef, ...constraints) : colRef;
+        const q = clientConstraints.length > 0 ? query(colRef, ...clientConstraints) : colRef;
         const snapshot = await getDocs(q);
         return {
           empty: snapshot.empty,
@@ -93,6 +161,18 @@ const db = {
         };
       },
       async add(data: any) {
+        if (adminDb) {
+          try {
+            const docRef = await adminDb.collection(collectionName).add(data);
+            return {
+              id: docRef.id,
+              ref: docRef
+            };
+          } catch (adminErr: any) {
+            console.warn(`Admin add failed for collection ${collectionName}, falling back to Client:`, adminErr.message);
+          }
+        }
+        
         if (!clientDb) throw new Error("Firestore client is not initialized.");
         const colRef = collection(clientDb, collectionName);
         const docRef = await addDoc(colRef, data);
@@ -105,6 +185,20 @@ const db = {
         return {
           id: docId,
           async get() {
+            if (adminDb) {
+              try {
+                const docSnap = await adminDb.collection(collectionName).doc(docId).get();
+                return {
+                  exists: docSnap.exists,
+                  data() {
+                    return docSnap.data();
+                  }
+                };
+              } catch (adminErr: any) {
+                console.warn(`Admin get document failed for ${collectionName}/${docId}, falling back to Client:`, adminErr.message);
+              }
+            }
+            
             if (!clientDb) throw new Error("Firestore client is not initialized.");
             const docRef = doc(clientDb, collectionName, docId);
             const docSnap = await getDoc(docRef);
@@ -116,6 +210,19 @@ const db = {
             };
           },
           async set(data: any, options?: { merge?: boolean }) {
+            if (adminDb) {
+              try {
+                if (options && typeof options.merge === 'boolean') {
+                  await adminDb.collection(collectionName).doc(docId).set(data, { merge: options.merge });
+                } else {
+                  await adminDb.collection(collectionName).doc(docId).set(data);
+                }
+                return;
+              } catch (adminErr: any) {
+                console.warn(`Admin set document failed for ${collectionName}/${docId}, falling back to Client:`, adminErr.message);
+              }
+            }
+            
             if (!clientDb) throw new Error("Firestore client is not initialized.");
             const docRef = doc(clientDb, collectionName, docId);
             if (options && typeof options.merge === 'boolean') {
@@ -125,11 +232,29 @@ const db = {
             }
           },
           async update(data: any) {
+            if (adminDb) {
+              try {
+                await adminDb.collection(collectionName).doc(docId).update(data);
+                return;
+              } catch (adminErr: any) {
+                console.warn(`Admin update document failed for ${collectionName}/${docId}, falling back to Client:`, adminErr.message);
+              }
+            }
+            
             if (!clientDb) throw new Error("Firestore client is not initialized.");
             const docRef = doc(clientDb, collectionName, docId);
             await updateDoc(docRef, data);
           },
           async delete() {
+            if (adminDb) {
+              try {
+                await adminDb.collection(collectionName).doc(docId).delete();
+                return;
+              } catch (adminErr: any) {
+                console.warn(`Admin delete document failed for ${collectionName}/${docId}, falling back to Client:`, adminErr.message);
+              }
+            }
+            
             if (!clientDb) throw new Error("Firestore client is not initialized.");
             const docRef = doc(clientDb, collectionName, docId);
             await deleteDoc(docRef);
@@ -137,6 +262,7 @@ const db = {
         };
       }
     };
+    return wrapper;
   }
 };
 
@@ -977,17 +1103,35 @@ app.post('/api/images/upload', async (req: Request, res: Response) => {
     const fileSize = buffer.length;
     console.log(`Uploaded file size: ${fileSize} bytes`);
 
-    // Try uploading to Firebase Storage if configured
+    // Try uploading to Firebase Storage (prioritize Admin SDK)
     let uploadedToStorage = false;
-    if (storage && !isStorageDisabled) {
+    
+    if (adminStorage) {
       try {
+        console.log(`Uploading ${filename} to Firebase Storage (Admin SDK)...`);
+        const bucket = adminStorage.bucket();
+        const fileRef = bucket.file(`assets/${filename}`);
+        await fileRef.save(buffer, {
+          metadata: { contentType },
+          public: true
+        });
+        uploadedToStorage = true;
+        console.log(`Successfully uploaded ${filename} to Firebase Storage (Admin) as assets/${filename}`);
+      } catch (adminStorageErr: any) {
+        console.warn(`Firebase Storage (Admin) upload failed:`, adminStorageErr.message);
+      }
+    }
+
+    if (!uploadedToStorage && storage && !isStorageDisabled) {
+      try {
+        console.log(`Uploading ${filename} to Firebase Storage (Client SDK)...`);
         const fileRef = storageRef(storage, `assets/${filename}`);
         await uploadBytes(fileRef, buffer, { contentType });
         uploadedToStorage = true;
         console.log(`Successfully uploaded ${filename} to Firebase Storage as assets/${filename}`);
       } catch (storageErr) {
         isStorageDisabled = true;
-        console.warn(`Firebase Storage is not enabled or permission is denied. Gracefully falling back to robust Firestore document persistence. Info:`, storageErr);
+        console.warn(`Firebase Storage Client SDK is not enabled or permission is denied. Gracefully falling back to robust Firestore document persistence. Info:`, storageErr);
       }
     }
 
@@ -1094,35 +1238,69 @@ app.get('/api/assets/:id', async (req: Request, res: Response) => {
         }
       }
 
-      // Try downloading from Firebase Storage if path is set and client is initialized
-      if (!buffer && data.storagePath && storage && !isStorageDisabled) {
-        try {
-          console.log(`Downloading ${data.storagePath} from Firebase Storage for asset ${docId}...`);
-          const fileRef = storageRef(storage, data.storagePath);
-          const arrayBuffer = await getBytes(fileRef);
-          buffer = Buffer.from(arrayBuffer);
-          console.log(`Successfully downloaded ${buffer.length} bytes from Firebase Storage.`);
-        } catch (storageErr) {
-          console.warn(`Failed to download from Firebase Storage for path ${data.storagePath} (will fall back to Firestore if available):`, storageErr);
+      // Try serving from Firebase Storage (Admin SDK) via public URL
+      if (data.storagePath) {
+        if (adminStorage) {
+          try {
+            console.log(`Redirecting to Firebase Storage public URL for ${data.storagePath} (Admin SDK)...`);
+            const bucket = adminStorage.bucket();
+            const fileRef = bucket.file(data.storagePath);
+            
+            // Generate a signed URL that's valid for 1 hour to ensure access even if bucket isn't fully public
+            const [url] = await fileRef.getSignedUrl({
+              version: 'v4',
+              action: 'read',
+              expires: Date.now() + 60 * 60 * 1000, // 1 hour
+            });
+            
+            return res.redirect(302, url);
+          } catch (adminStorageErr: any) {
+            console.warn(`Admin SDK signed URL generation failed for ${data.storagePath}:`, adminStorageErr.message);
+          }
+        }
+        
+        if (!buffer && storage && !isStorageDisabled) {
+          try {
+            console.log(`Downloading ${data.storagePath} from Firebase Storage (Client SDK) for asset ${docId}...`);
+            const fileRef = storageRef(storage, data.storagePath);
+            const arrayBuffer = await getBytes(fileRef);
+            buffer = Buffer.from(arrayBuffer);
+            console.log(`Successfully downloaded ${buffer.length} bytes from Firebase Storage (Client).`);
+          } catch (storageErr) {
+            console.warn(`Failed to download from Firebase Storage Client SDK for path ${data.storagePath}:`, storageErr);
+          }
         }
       }
 
       // Fallback: If still no buffer, try checking potential paths on Storage
-      if (!buffer && storage && !isStorageDisabled) {
+      if (!buffer) {
         const possiblePaths = [`assets/${id}`];
         if (data.name) {
           possiblePaths.push(`assets/${data.name}`);
         }
+        
         for (const sPath of possiblePaths) {
-          try {
-            console.log(`Trying fallback download from Firebase Storage path: ${sPath}`);
-            const fileRef = storageRef(storage, sPath);
-            const arrayBuffer = await getBytes(fileRef);
-            buffer = Buffer.from(arrayBuffer);
-            console.log(`Successfully retrieved fallback from Firebase Storage.`);
-            break;
-          } catch (e) {
-            // Silently try next path
+          if (adminStorage) {
+            try {
+              console.log(`Trying fallback Admin SDK download from Firebase Storage path: ${sPath}`);
+              const bucket = adminStorage.bucket();
+              const fileRef = bucket.file(sPath);
+              const [downloadedBuffer] = await fileRef.download();
+              buffer = downloadedBuffer;
+              console.log(`Successfully retrieved fallback via Admin SDK.`);
+              break;
+            } catch (e) {}
+          }
+          
+          if (!buffer && storage && !isStorageDisabled) {
+            try {
+              console.log(`Trying fallback Client SDK download from Firebase Storage path: ${sPath}`);
+              const fileRef = storageRef(storage, sPath);
+              const arrayBuffer = await getBytes(fileRef);
+              buffer = Buffer.from(arrayBuffer);
+              console.log(`Successfully retrieved fallback via Client SDK.`);
+              break;
+            } catch (e) {}
           }
         }
       }
