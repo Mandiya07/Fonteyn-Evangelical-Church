@@ -1,10 +1,9 @@
 {
-  "projectId": "sincere-gist-scf5x",
-  "appId": "1:320132420925:web:a94b00a1ca9711b7a76154",
-  "apiKey": "AIzaSyA2XSFNR-vUHDMOShtrexG1zZCW47h-HOA",
-  "authDomain": "sincere-gist-scf5x.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-f4e3e5f4-ebb2-4367-91a1-f78853487a9f",
-  "storageBucket": "sincere-gist-scf5x.firebasestorage.app",
-  "messagingSenderId": "320132420925",
+  "projectId": "fonteyn-evangelical-church",
+  "appId": "1:996985609085:web:cd08ddb0c0a9c8ae43ca14",
+  "apiKey": "AIzaSyCTAnVU_TdNmSmas5V2TY5J6nBYuroa_pI",
+  "authDomain": "fonteyn-evangelical-church.firebaseapp.com",
+  "storageBucket": "fonteyn-evangelical-church.firebasestorage.app",
+  "messagingSenderId": "996985609085",
   "measurementId": ""
 }

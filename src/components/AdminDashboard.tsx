@@ -4,12 +4,13 @@ import {
   MessageSquare, FileText, ImageIcon, ShieldCheck, 
   Settings, Activity, Search, Plus, MoreVertical, Edit2, Trash2,
   Building2, GraduationCap, Radio, Store, Globe2, X, AlertTriangle, Check,
-  Folder
+  Folder, Server
 } from 'lucide-react';
 import AISermonAssistant from './AISermonAssistant';
 import { useAppImages } from './ImageContext';
 import AdminImagesView from './AdminImagesView';
 import AdminMediaFilesView from './AdminMediaFilesView';
+import StorageDiagnostics from './StorageDiagnostics';
 
 interface AdminDashboardProps {
   language: 'en' | 'swati';
@@ -26,6 +27,7 @@ const TABS = [
   { id: 'blog', icon: <FileText className="w-4 h-4" />, label: 'Blog Posts' },
   { id: 'images', icon: <ImageIcon className="w-4 h-4" />, label: 'Image Assets' },
   { id: 'media-files', icon: <Folder className="w-4 h-4" />, label: 'Media Files' },
+  { id: 'storage-diagnostics', icon: <Server className="w-4 h-4 text-emerald-400" />, label: 'Storage Diagnostics' },
   { id: 'members', icon: <ShieldCheck className="w-4 h-4" />, label: 'Members' },
 ];
 
@@ -716,7 +718,13 @@ export default function AdminDashboard({ language }: AdminDashboardProps) {
             </div>
           )}
 
-          {activeTab !== 'overview' && activeTab !== 'images' && activeTab !== 'media-files' && (
+          {activeTab === 'storage-diagnostics' && (
+            <div className="mb-8 animate-fade-in">
+              <StorageDiagnostics />
+            </div>
+          )}
+
+          {activeTab !== 'overview' && activeTab !== 'images' && activeTab !== 'media-files' && activeTab !== 'storage-diagnostics' && (
             <div className="bg-white rounded-3xl border border-gray-150 shadow-sm animate-fade-in overflow-hidden">
                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/40">
                  <h2 className="font-header text-sm font-bold text-primary flex items-center gap-2 uppercase tracking-wider">

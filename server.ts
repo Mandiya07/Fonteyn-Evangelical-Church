@@ -49,9 +49,7 @@ try {
       credential: admin.credential.cert(serviceAccount),
       storageBucket: bucketName
     }, 'admin-app');
-    adminDb = firebaseConfig?.firestoreDatabaseId 
-      ? getAdminFirestore(adminApp, firebaseConfig.firestoreDatabaseId)
-      : getAdminFirestore(adminApp);
+    adminDb = getAdminFirestore(adminApp);
     adminStorage = getAdminStorage(adminApp);
     isAdminInitialized = true;
     console.log('Firebase Admin SDK initialized successfully via FIREBASE_SERVICE_ACCOUNT_KEY env variable.');
@@ -60,9 +58,7 @@ try {
       credential: admin.credential.applicationDefault(),
       storageBucket: bucketName
     }, 'admin-app');
-    adminDb = firebaseConfig?.firestoreDatabaseId 
-      ? getAdminFirestore(adminApp, firebaseConfig.firestoreDatabaseId)
-      : getAdminFirestore(adminApp);
+    adminDb = getAdminFirestore(adminApp);
     adminStorage = getAdminStorage(adminApp);
     isAdminInitialized = true;
     console.log('Firebase Admin SDK initialized successfully via GOOGLE_APPLICATION_CREDENTIALS env variable.');
@@ -87,14 +83,13 @@ let clientDb: any = null;
 if (firebaseApp) {
   try {
     const settings = { experimentalForceLongPolling: true };
-    clientDb = firebaseConfig.firestoreDatabaseId 
-      ? initializeFirestore(firebaseApp, settings, firebaseConfig.firestoreDatabaseId)
-      : initializeFirestore(firebaseApp, settings);
+    clientDb = initializeFirestore(firebaseApp, settings);
   } catch (err) {
-    console.warn("Firestore already initialized or failed to initialize with settings. Falling back to getFirestore:", err);
-    clientDb = firebaseConfig.firestoreDatabaseId 
-      ? getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId)
-      : getFirestore(firebaseApp);
+    try {
+      clientDb = getFirestore(firebaseApp);
+    } catch (e2) {
+      console.warn("Failed to get Firestore client:", e2);
+    }
   }
 }
 
@@ -816,6 +811,22 @@ function sanitizeServerImages(images: Record<string, string>): Record<string, st
 // Initial load: Priority Firestore > Local File > Hardcoded Defaults
 async function loadPersistentConfig() {
   console.log('Loading persistent config...');
+  // 0. Load secrets into process.env
+  try {
+    const secretsDoc = await db.collection('settings').doc('secrets').get();
+    if (secretsDoc.exists) {
+      const data = secretsDoc.data() || {};
+      for (const [k, v] of Object.entries(data)) {
+        if (v && typeof v === 'string') {
+          process.env[k] = v;
+        }
+      }
+      console.log('Secrets loaded into process.env from Firestore');
+    }
+  } catch (e) {
+    console.warn('Failed to load secrets into env:', e);
+  }
+
   // 1. Try Firestore
   try {
     console.log('Trying to get app-images from Firestore...');
@@ -1285,8 +1296,8 @@ app.get('/api/assets/:id', async (req: Request, res: Response) => {
 // Lazy-initialize Gemini AI Helper
 let aiClient: GoogleGenAI | null = null;
 function getGeminiClient(): GoogleGenAI {
-  if (!aiClient) {
-    const key = process.env.GEMINI_API_KEY;
+  const key = process.env.GEMINI_API_KEY;
+  if (!aiClient || (aiClient as any)._apiKey !== key) {
     if (!key || key === 'MY_GEMINI_API_KEY') {
       throw new Error('GEMINI_API_KEY environment variable is not configured');
     }
@@ -1298,8 +1309,150 @@ function getGeminiClient(): GoogleGenAI {
         }
       }
     });
+    (aiClient as any)._apiKey = key;
   }
   return aiClient;
+}
+
+// Secrets API endpoints
+app.get('/api/secrets', async (req: Request, res: Response) => {
+  try {
+    let secretsMap: Record<string, string> = {
+      GEMINI_API_KEY: process.env.GEMINI_API_KEY || ''
+    };
+    try {
+      const doc = await db.collection('settings').doc('secrets').get();
+      if (doc.exists) {
+        const data = doc.data() || {};
+        secretsMap = { ...secretsMap, ...data };
+      }
+    } catch (e) {
+      console.warn('Error reading secrets from Firestore:', e);
+    }
+    
+    const secretsArray = Object.entries(secretsMap).map(([name, value]) => ({
+      name,
+      value: value ? (value.length > 8 ? value.substring(0, 4) + '...' + value.substring(value.length - 4) : '****') : ''
+    }));
+
+    res.json({
+      secrets: secretsArray,
+      ...secretsMap
+    });
+  } catch (err: any) {
+    console.error('Failed to load secrets:', err);
+    res.status(500).json({ error: err.message || 'Failed to load secrets' });
+  }
+});
+
+app.post('/api/secrets', async (req: Request, res: Response) => {
+  try {
+    const { name, value, secrets } = req.body;
+    let newSecrets: Record<string, string> = {};
+    if (secrets && Array.isArray(secrets)) {
+      for (const s of secrets) {
+        if (s.name) {
+          newSecrets[s.name] = s.value;
+          process.env[s.name] = s.value;
+        }
+      }
+    } else if (name) {
+      newSecrets[name] = value;
+      process.env[name] = value;
+    }
+
+    try {
+      const docRef = db.collection('settings').doc('secrets');
+      const doc = await docRef.get();
+      const existing = doc.exists ? doc.data() || {} : {};
+      const merged = { ...existing, ...newSecrets };
+      await docRef.set(merged);
+    } catch (dbErr) {
+      console.error('Error saving secrets to Firestore:', dbErr);
+    }
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Failed to save secrets:', err);
+    res.status(500).json({ error: err.message || 'Failed to save secrets' });
+  }
+});
+
+app.put('/api/secrets', async (req: Request, res: Response) => {
+  try {
+    const { name, value, secrets } = req.body;
+    let newSecrets: Record<string, string> = {};
+    if (secrets && Array.isArray(secrets)) {
+      for (const s of secrets) {
+        if (s.name) {
+          newSecrets[s.name] = s.value;
+          process.env[s.name] = s.value;
+        }
+      }
+    } else if (name) {
+      newSecrets[name] = value;
+      process.env[name] = value;
+    }
+
+    try {
+      const docRef = db.collection('settings').doc('secrets');
+      const doc = await docRef.get();
+      const existing = doc.exists ? doc.data() || {} : {};
+      const merged = { ...existing, ...newSecrets };
+      await docRef.set(merged);
+    } catch (dbErr) {
+      console.error('Error updating secrets in Firestore:', dbErr);
+    }
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Failed to update secrets:', err);
+    res.status(500).json({ error: err.message || 'Failed to update secrets' });
+  }
+});
+
+async function generateContentWithFallback(ai: GoogleGenAI, options: any) {
+  const modelsToTry = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-1.5-flash'];
+  let lastError: any = null;
+  for (const m of modelsToTry) {
+    try {
+      const res = await ai.models.generateContent({
+        ...options,
+        model: m
+      });
+      return res;
+    } catch (e: any) {
+      lastError = e;
+      const msg = String(e?.message || e);
+      if (msg.includes('503') || msg.includes('UNAVAILABLE') || msg.includes('high demand') || msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastError;
+}
+
+async function createChatWithFallback(ai: GoogleGenAI, options: any) {
+  const modelsToTry = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-1.5-flash'];
+  let lastError: any = null;
+  for (const m of modelsToTry) {
+    try {
+      const chat = ai.chats.create({
+        ...options,
+        model: m
+      });
+      return chat;
+    } catch (e: any) {
+      lastError = e;
+      const msg = String(e?.message || e);
+      if (msg.includes('503') || msg.includes('UNAVAILABLE') || msg.includes('high demand') || msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastError;
 }
 
 // REST APIs
@@ -1833,8 +1986,7 @@ Here is your official training data about the church:
 
 Answer directly, warmly, and use a faithful, humble Christian tone. You can occasionally output common Siswati words of greeting or blessing (e.g. 'Yebo', 'Ngiyanemukela', 'Nkulunkulu anibusise') where natural. Keep responses reasonably concise and conversational. Do not make up facts.`;
 
-    const chat = ai.chats.create({
-      model: 'gemini-3.5-flash',
+    const chat = await createChatWithFallback(ai, {
       config: {
         systemInstruction,
         temperature: 0.7,
@@ -1894,8 +2046,7 @@ Please provide a JSON object containing exactly these properties:
 
 Output ONLY the raw JSON block. No markdown, no explanation wrappers.`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+    const response = await generateContentWithFallback(ai, {
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -1941,8 +2092,7 @@ app.post('/api/ai/translate', async (req: Request, res: Response) => {
       ? 'Translate this English text into beautiful, natural SiSwati (the official language of Eswatini). Keep the Christian tone respectful and warm.' 
       : 'Translate this SiSwati text into elegant English. Keep the warm Christian tone intact.';
       
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+    const response = await generateContentWithFallback(ai, {
       contents: `${instruction}\n\nText:\n"${text}"`,
     });
 
@@ -2015,8 +2165,7 @@ The response MUST be a single structured JSON object.`;
 - a short closing prayer of 1-2 sentences
 - a daily reflection/application question`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+    const response = await generateContentWithFallback(ai, {
       contents: userPrompt,
       config: {
         systemInstruction: systemPrompt,
@@ -2177,8 +2326,7 @@ The response MUST be a single structured JSON object containing 'verse', 'text',
 - 'text': the actual bible verse text in English
 - 'message': a short, uplifting message of 2-3 sentences in English applying this scripture's truth to encourage believers today.`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+    const response = await generateContentWithFallback(ai, {
       contents: userPrompt,
       config: {
         systemInstruction: systemPrompt,
