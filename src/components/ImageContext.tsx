@@ -125,7 +125,7 @@ export function ImageProvider({ children }: { children: React.ReactNode }) {
     return false;
   };
 
-  const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 0.8): Promise<string> => {
+  const compressImage = (file: File, maxWidth = 900, maxHeight = 900, quality = 0.7): Promise<string> => {
     return new Promise((resolve, reject) => {
       // SVGs shouldn't be compressed via Canvas as they are vector graphic XML
       if (file.type === 'image/svg+xml') {

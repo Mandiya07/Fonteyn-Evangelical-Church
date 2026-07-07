@@ -1168,23 +1168,23 @@ app.post('/api/images/upload', async (req: Request, res: Response) => {
         updatedAt: new Date().toISOString()
       };
       
-      // Store base64 inside Firestore only if it's within safe boundaries (< 1MB)
-      if (base64.length <= 1040000) {
+      // Store base64 inside Firestore only if it's within safe boundaries (< 700KB)
+      if (base64.length <= 700000) {
         docData.base64 = base64;
       } else {
-        console.log(`Base64 size (${base64.length} chars) is too large for Firestore document. Using Firebase Storage instead.`);
+        console.log(`Base64 size (${base64.length} chars) is too large for Firestore document. Relying on in-memory/disk/storage cache.`);
       }
 
       await db.collection('assets').doc(docId).set(docData);
       persistedInFirestore = true;
       console.log(`Asset metadata for doc ${docId} persisted in Firestore`);
     } catch (fsErr) {
-      console.warn(`Firestore asset doc save failed for ${docId}:`, fsErr);
+      console.warn(`Firestore asset doc save failed for ${docId} (non-fatal, in-memory cache is active):`, fsErr);
     }
 
     // Return the dynamic api URL so it works on Vercel
     const publicUrl = `/api/assets/${docId}`;
-    res.json({ success: true, url: publicUrl, persistedInFirestore, uploadedToStorage, savedLocally });
+    return res.json({ success: true, url: publicUrl, persistedInFirestore, uploadedToStorage, savedLocally });
   } catch (err: any) {
     console.error('File Upload Error:', err.stack || err);
     res.status(500).json({ error: err.message || 'Failed to save uploaded file', stack: err.stack || String(err) });
