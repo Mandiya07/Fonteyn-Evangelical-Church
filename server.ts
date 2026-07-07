@@ -25,7 +25,8 @@ import {
   query, 
   orderBy, 
   limit,
-  QueryConstraint
+  QueryConstraint,
+  where
 } from 'firebase/firestore';
 import firebaseConfig from './firebase-applet-config.json';
 import admin from 'firebase-admin';
@@ -105,6 +106,13 @@ const db = {
     let adminQueryBuilder: any = adminDb ? adminDb.collection(collectionName) : null;
     
     const wrapper = {
+      where(field: string, op: any, value: any) {
+        clientConstraints.push(where(field, op, value));
+        if (adminQueryBuilder) {
+          adminQueryBuilder = adminQueryBuilder.where(field, op, value);
+        }
+        return this;
+      },
       orderBy(field: string, direction: 'asc' | 'desc' = 'asc') {
         clientConstraints.push(orderBy(field, direction));
         if (adminQueryBuilder) {
@@ -176,14 +184,16 @@ const db = {
           ref: docRef
         };
       },
-      doc(docId: string) {
+      doc(docId?: string) {
+        const generatedId = docId || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         return {
-          id: docId,
+          id: generatedId,
           async get() {
             if (adminDb) {
               try {
-                const docSnap = await adminDb.collection(collectionName).doc(docId).get();
+                const docSnap = await adminDb.collection(collectionName).doc(generatedId).get();
                 return {
+                  id: generatedId,
                   exists: docSnap.exists,
                   data() {
                     return docSnap.data();
@@ -1422,59 +1432,21 @@ app.delete('/api/sermons/:id', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/events', (req: Request, res: Response) => {
-  res.json(events);
-});
 
-app.post('/api/events', (req: Request, res: Response) => {
-  const newEvent = { id: `evt-${Date.now()}`, registeredCount: 0, rsvps: [], volunteers: [], ...req.body };
-  events.unshift(newEvent);
-  res.status(201).json(newEvent);
-});
 
-app.put('/api/events/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const idx = events.findIndex(e => e.id === id);
-  if (idx !== -1) {
-    events[idx] = { ...events[idx], ...req.body };
-    res.json(events[idx]);
-  } else {
-    res.status(404).json({ error: 'Event not found' });
-  }
-});
 
-app.delete('/api/events/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  events = events.filter(e => e.id !== id);
-  res.json({ success: true });
-});
 
-app.get('/api/blog', (req: Request, res: Response) => {
-  res.json(blogPosts);
-});
 
-app.post('/api/blog', (req: Request, res: Response) => {
-  const newPost = { id: `blog-${Date.now()}`, likes: 0, tags: [], ...req.body };
-  blogPosts.unshift(newPost);
-  res.status(201).json(newPost);
-});
 
-app.put('/api/blog/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const idx = blogPosts.findIndex(b => b.id === id);
-  if (idx !== -1) {
-    blogPosts[idx] = { ...blogPosts[idx], ...req.body };
-    res.json(blogPosts[idx]);
-  } else {
-    res.status(404).json({ error: 'Blog post not found' });
-  }
-});
 
-app.delete('/api/blog/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  blogPosts = blogPosts.filter(b => b.id !== id);
-  res.json({ success: true });
-});
+
+
+
+
+
+
+
+
 
 app.get('/api/prayer-requests', async (req: Request, res: Response) => {
   try {
@@ -1608,93 +1580,29 @@ app.delete('/api/prayer-requests/:id', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/donations', (req: Request, res: Response) => {
-  res.json(donations);
-});
 
-app.post('/api/donations', (req: Request, res: Response) => {
-  const { donorName, amount, category, paymentMethod } = req.body;
-  const newDonation = {
-    id: `don-${Date.now()}`,
-    donorName: donorName || 'Anonymous',
-    amount: parseFloat(amount) || 0,
-    category,
-    paymentMethod,
-    date: new Date().toISOString().split('T')[0],
-    receiptNumber: `FEC-REC-${Math.floor(1000 + Math.random() * 9000)}`
-  };
-  donations.unshift(newDonation);
-  res.status(201).json(newDonation);
-});
 
-app.put('/api/donations/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const idx = donations.findIndex(d => d.id === id);
-  if (idx !== -1) {
-    donations[idx] = { ...donations[idx], ...req.body, amount: parseFloat(req.body.amount) || donations[idx].amount };
-    res.json(donations[idx]);
-  } else {
-    res.status(404).json({ error: 'Donation not found' });
-  }
-});
 
-app.delete('/api/donations/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  donations = donations.filter(d => d.id !== id);
-  res.json({ success: true });
-});
+
+
+
+
 
 // Members modifications
-app.post('/api/members', (req: Request, res: Response) => {
-  const newMember = { id: `mem-${Date.now()}`, joinedDate: new Date().toISOString().split('T')[0], ...req.body };
-  members.unshift(newMember);
-  res.status(201).json(newMember);
-});
 
-app.put('/api/members/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const idx = members.findIndex(m => m.id === id);
-  if (idx !== -1) {
-    members[idx] = { ...members[idx], ...req.body };
-    res.json(members[idx]);
-  } else {
-    res.status(404).json({ error: 'Member not found' });
-  }
-});
 
-app.delete('/api/members/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  members = members.filter(m => m.id !== id);
-  res.json({ success: true });
-});
+
+
+
 
 // Users management endpoints
-app.get('/api/users', (req: Request, res: Response) => {
-  res.json(users);
-});
 
-app.post('/api/users', (req: Request, res: Response) => {
-  const newUser = { id: `usr-${Date.now()}`, status: "Active", joinedDate: new Date().toISOString().split('T')[0], ...req.body };
-  users.unshift(newUser);
-  res.status(201).json(newUser);
-});
 
-app.put('/api/users/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const idx = users.findIndex(u => u.id === id);
-  if (idx !== -1) {
-    users[idx] = { ...users[idx], ...req.body };
-    res.json(users[idx]);
-  } else {
-    res.status(404).json({ error: 'User not found' });
-  }
-});
 
-app.delete('/api/users/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  users = users.filter(u => u.id !== id);
-  res.json({ success: true });
-});
+
+
+
+
 
 app.get('/api/profile', async (req: Request, res: Response) => {
   try {
@@ -1722,66 +1630,64 @@ app.post('/api/profile', async (req: Request, res: Response) => {
 });
 
 // Ministries endpoints
-app.get('/api/ministries', (req: Request, res: Response) => {
-  res.json(ministries);
-});
 
-app.post('/api/ministries', (req: Request, res: Response) => {
-  const newMin = { id: `min-${Date.now()}`, activities: [], gallery: [], ...req.body };
-  ministries.unshift(newMin);
-  res.status(201).json(newMin);
-});
 
-app.put('/api/ministries/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const idx = ministries.findIndex(m => m.id === id);
-  if (idx !== -1) {
-    ministries[idx] = { ...ministries[idx], ...req.body };
-    res.json(ministries[idx]);
-  } else {
-    res.status(404).json({ error: 'Ministry not found' });
-  }
-});
 
-app.delete('/api/ministries/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  ministries = ministries.filter(m => m.id !== id);
-  res.json({ success: true });
-});
 
-app.post('/api/events/rsvp', (req: Request, res: Response) => {
-  const { eventId, email } = req.body;
-  const event = events.find(e => e.id === eventId);
-  if (event) {
-    if (!event.rsvps.includes(email)) {
-      event.rsvps.push(email);
-      event.registeredCount += 1;
-    }
-    res.json(event);
-  } else {
-    res.status(404).json({ error: 'Event not found' });
-  }
-});
 
-app.post('/api/events/volunteer', (req: Request, res: Response) => {
-  const { eventId, roleName, email } = req.body;
-  const event = events.find(e => e.id === eventId);
-  if (event) {
-    const roleItem = event.volunteers.find(v => v.role === roleName);
-    if (roleItem) {
-      if (!roleItem.filled.includes(email)) {
-        if (roleItem.filled.length < roleItem.slots) {
-          roleItem.filled.push(email);
-        } else {
-          return res.status(400).json({ error: 'Role slots are already full.' });
-        }
+
+
+
+app.post('/api/events/rsvp', async (req: Request, res: Response) => {
+  try {
+    const { eventId, email } = req.body;
+    const docRef = db.collection('events').doc(eventId);
+    const doc = await docRef.get();
+    if (doc.exists) {
+      const event = doc.data() as any;
+      if (!event.rsvps) event.rsvps = [];
+      if (!event.rsvps.includes(email)) {
+        event.rsvps.push(email);
+        event.registeredCount = (event.registeredCount || 0) + 1;
+        await docRef.set(event, { merge: true });
       }
-      res.json(event);
+      res.json({ id: doc.id, ...event });
     } else {
-      res.status(404).json({ error: 'Role not found' });
+      res.status(404).json({ error: 'Event not found' });
     }
-  } else {
-    res.status(404).json({ error: 'Event not found' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
+app.post('/api/events/volunteer', async (req: Request, res: Response) => {
+  try {
+    const { eventId, roleName, email } = req.body;
+    const docRef = db.collection('events').doc(eventId);
+    const doc = await docRef.get();
+    if (doc.exists) {
+      const event = doc.data() as any;
+      if (!event.volunteers) event.volunteers = [];
+      const roleItem = event.volunteers.find((v: any) => v.role === roleName);
+      if (roleItem) {
+        if (!roleItem.filled) roleItem.filled = [];
+        if (!roleItem.filled.includes(email)) {
+          if (roleItem.filled.length < roleItem.slots) {
+            roleItem.filled.push(email);
+            await docRef.set(event, { merge: true });
+          } else {
+            return res.status(400).json({ error: 'Role slots are already full.' });
+          }
+        }
+        res.json({ id: doc.id, ...event });
+      } else {
+        res.status(404).json({ error: 'Role not found' });
+      }
+    } else {
+      res.status(404).json({ error: 'Event not found' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'Failed' });
   }
 });
 
@@ -1811,8 +1717,21 @@ app.get('/api/sync/events', (req: Request, res: Response) => {
 
 let notifications: any[] = [];
 
-app.get('/api/notifications', (req: Request, res: Response) => {
-  res.json(notifications);
+app.get('/api/notifications', async (req: Request, res: Response) => {
+  try {
+    const snapshot = await db.collection('notifications').get();
+    if (snapshot.empty && notifications && notifications.length > 0) {
+      for (const item of notifications) {
+        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await db.collection('notifications').doc(docId).set(item);
+      }
+      const newSnap = await db.collection('notifications').get();
+      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }
+    res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch data' });
+  }
 });
 
 app.post('/api/notifications/register-device', (req: Request, res: Response) => {
@@ -1821,17 +1740,20 @@ app.post('/api/notifications/register-device', (req: Request, res: Response) => 
   res.status(200).json({ success: true, message: 'Device securely registered for push notifications.' });
 });
 
-app.get('/api/members', (req: Request, res: Response) => {
-  res.json(members);
-});
 
-app.post('/api/members/auth', (req: Request, res: Response) => {
-  const { email, password } = req.body;
-  const member = members.find(m => m.email === email);
-  if (member) {
-    res.json({ success: true, token: 'fec-mobile-auth-token-999', member });
-  } else {
-    res.status(401).json({ success: false, error: 'Invalid member credentials' });
+
+app.post('/api/members/auth', async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body;
+    const snapshot = await db.collection('members').where('email', '==', email).get();
+    if (!snapshot.empty) {
+      const memberDoc = snapshot.docs[0];
+      res.json({ success: true, token: 'fec-mobile-auth-token-999', member: { id: memberDoc.id, ...memberDoc.data() } });
+    } else {
+      res.status(401).json({ success: false, error: 'Invalid member credentials' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'Authentication failed' });
   }
 });
 
@@ -2323,129 +2245,34 @@ The response MUST be a single structured JSON object containing 'verse', 'text',
 // ==========================================
 
 // 1. Multi-Branch & Campus Expansion
-app.get('/api/v2/branches', (req: Request, res: Response) => {
-  res.json(branches);
-});
-app.post('/api/v2/branches', (req: Request, res: Response) => {
-  const newInst = { id: `br-${Date.now()}`, metrics: { averageAttendance: 100, activeMinistries: 2 }, ...req.body };
-  branches.unshift(newInst);
-  res.status(201).json(newInst);
-});
-app.put('/api/v2/branches/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const idx = branches.findIndex(b => b.id === id);
-  if (idx !== -1) {
-    branches[idx] = { ...branches[idx], ...req.body };
-    res.json(branches[idx]);
-  } else {
-    res.status(404).json({ error: "Branch not found" });
-  }
-});
-app.delete('/api/v2/branches/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  branches = branches.filter(b => b.id !== id);
-  res.json({ success: true });
-});
+
+
+
+
 
 // 2. Educational Networks (Schools, Bible College)
-app.get('/api/v2/education/schools', (req: Request, res: Response) => {
-  res.json(schoolInstitutions);
-});
-app.post('/api/v2/education/schools', (req: Request, res: Response) => {
-  const newInst = { id: `edu-${Date.now()}`, enrollmentCount: 20, ...req.body };
-  schoolInstitutions.unshift(newInst);
-  res.status(201).json(newInst);
-});
-app.put('/api/v2/education/schools/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const idx = schoolInstitutions.findIndex(s => s.id === id);
-  if (idx !== -1) {
-    schoolInstitutions[idx] = { ...schoolInstitutions[idx], ...req.body };
-    res.json(schoolInstitutions[idx]);
-  } else {
-    res.status(404).json({ error: "Institution not found" });
-  }
-});
-app.delete('/api/v2/education/schools/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  schoolInstitutions = schoolInstitutions.filter(s => s.id !== id);
-  res.json({ success: true });
-});
+
+
+
+
 
 // 3. Broadcasting & Media App Infrastructure
-app.get('/api/v2/media/radio', (req: Request, res: Response) => {
-  res.json(broadcastStations);
-});
-app.post('/api/v2/media/radio', (req: Request, res: Response) => {
-  const newStation = { id: `rad-${Date.now()}`, schedule: [], ...req.body };
-  broadcastStations.unshift(newStation);
-  res.status(201).json(newStation);
-});
-app.put('/api/v2/media/radio/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const idx = broadcastStations.findIndex(b => b.id === id);
-  if (idx !== -1) {
-    broadcastStations[idx] = { ...broadcastStations[idx], ...req.body };
-    res.json(broadcastStations[idx]);
-  } else {
-    res.status(404).json({ error: "Station not found" });
-  }
-});
-app.delete('/api/v2/media/radio/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  broadcastStations = broadcastStations.filter(b => b.id !== id);
-  res.json({ success: true });
-});
+
+
+
+
 
 // 4. Christian Bookstore & Digital Products
-app.get('/api/v2/store/products', (req: Request, res: Response) => {
-  res.json(bookstoreProducts);
-});
-app.post('/api/v2/store/products', (req: Request, res: Response) => {
-  const newProduct = { id: `bk-${Date.now()}`, stockCount: 10, price: 50, ...req.body };
-  bookstoreProducts.unshift(newProduct);
-  res.status(201).json(newProduct);
-});
-app.put('/api/v2/store/products/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const idx = bookstoreProducts.findIndex(p => p.id === id);
-  if (idx !== -1) {
-    bookstoreProducts[idx] = { ...bookstoreProducts[idx], ...req.body };
-    res.json(bookstoreProducts[idx]);
-  } else {
-    res.status(404).json({ error: "Product not found" });
-  }
-});
-app.delete('/api/v2/store/products/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  bookstoreProducts = bookstoreProducts.filter(p => p.id !== id);
-  res.json({ success: true });
-});
+
+
+
+
 
 // 5. Community Development Projects
-app.get('/api/v2/community/projects', (req: Request, res: Response) => {
-  res.json(communityProjects);
-});
-app.post('/api/v2/community/projects', (req: Request, res: Response) => {
-  const newProj = { id: `proj-${Date.now()}`, currentFunding: 0, targetBudget: 1000, partners: [], ...req.body };
-  communityProjects.unshift(newProj);
-  res.status(201).json(newProj);
-});
-app.put('/api/v2/community/projects/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const idx = communityProjects.findIndex(p => p.id === id);
-  if (idx !== -1) {
-    communityProjects[idx] = { ...communityProjects[idx], ...req.body };
-    res.json(communityProjects[idx]);
-  } else {
-    res.status(404).json({ error: "Project not found" });
-  }
-});
-app.delete('/api/v2/community/projects/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  communityProjects = communityProjects.filter(p => p.id !== id);
-  res.json({ success: true });
-});
+
+
+
+
 
 
 app.get('/sitemap.xml', (req: Request, res: Response) => {
@@ -2634,3 +2461,531 @@ startServer().catch(err => {
 });
 
 export default app;
+
+app.get('/api/users', async (req: Request, res: Response) => {
+  try {
+    const snapshot = await db.collection('users').get();
+    if (snapshot.empty && users && users.length > 0) {
+      for (const item of users) {
+        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await db.collection('users').doc(docId).set(item);
+      }
+      const newSnap = await db.collection('users').get();
+      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }
+    res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch data' });
+  }
+});
+
+app.post('/api/users', async (req: Request, res: Response) => {
+  try {
+    const docRef = db.collection('users').doc();
+    const body = req.body;
+    const newItem = { id: docRef.id, status: "Active", joinedDate: new Date().toISOString().split("T")[0], ...body };
+    await docRef.set(newItem);
+    res.status(201).json(newItem);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create' });
+  }
+});
+
+app.put('/api/users/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('users').doc(req.params.id).set(req.body, { merge: true });
+    const doc = await db.collection('users').doc(req.params.id).get();
+    res.json({ id: doc.id, ...doc.data() });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update' });
+  }
+});
+
+app.delete('/api/users/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('users').doc(req.params.id).delete();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
+
+app.get('/api/events', async (req: Request, res: Response) => {
+  try {
+    const snapshot = await db.collection('events').get();
+    if (snapshot.empty && events && events.length > 0) {
+      for (const item of events) {
+        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await db.collection('events').doc(docId).set(item);
+      }
+      const newSnap = await db.collection('events').get();
+      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }
+    res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch data' });
+  }
+});
+
+app.post('/api/events', async (req: Request, res: Response) => {
+  try {
+    const docRef = db.collection('events').doc();
+    const body = req.body;
+    const newItem = { id: docRef.id, registeredCount: 0, rsvps: [], volunteers: [], ...body };
+    await docRef.set(newItem);
+    res.status(201).json(newItem);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create' });
+  }
+});
+
+app.put('/api/events/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('events').doc(req.params.id).set(req.body, { merge: true });
+    const doc = await db.collection('events').doc(req.params.id).get();
+    res.json({ id: doc.id, ...doc.data() });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update' });
+  }
+});
+
+app.delete('/api/events/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('events').doc(req.params.id).delete();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
+
+app.get('/api/blog', async (req: Request, res: Response) => {
+  try {
+    const snapshot = await db.collection('blog').get();
+    if (snapshot.empty && blogPosts && blogPosts.length > 0) {
+      for (const item of blogPosts) {
+        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await db.collection('blog').doc(docId).set(item);
+      }
+      const newSnap = await db.collection('blog').get();
+      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }
+    res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch data' });
+  }
+});
+
+app.post('/api/blog', async (req: Request, res: Response) => {
+  try {
+    const docRef = db.collection('blog').doc();
+    const body = req.body;
+    const newItem = { id: docRef.id, likes: 0, tags: [], ...body };
+    await docRef.set(newItem);
+    res.status(201).json(newItem);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create' });
+  }
+});
+
+app.put('/api/blog/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('blog').doc(req.params.id).set(req.body, { merge: true });
+    const doc = await db.collection('blog').doc(req.params.id).get();
+    res.json({ id: doc.id, ...doc.data() });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update' });
+  }
+});
+
+app.delete('/api/blog/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('blog').doc(req.params.id).delete();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
+
+app.get('/api/donations', async (req: Request, res: Response) => {
+  try {
+    const snapshot = await db.collection('donations').get();
+    if (snapshot.empty && donations && donations.length > 0) {
+      for (const item of donations) {
+        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await db.collection('donations').doc(docId).set(item);
+      }
+      const newSnap = await db.collection('donations').get();
+      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }
+    res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch data' });
+  }
+});
+
+app.post('/api/donations', async (req: Request, res: Response) => {
+  try {
+    const docRef = db.collection('donations').doc();
+    const body = req.body;
+    const newItem = { id: docRef.id, date: new Date().toISOString().split("T")[0], status: "Completed", ...body };
+    await docRef.set(newItem);
+    res.status(201).json(newItem);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create' });
+  }
+});
+
+app.put('/api/donations/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('donations').doc(req.params.id).set(req.body, { merge: true });
+    const doc = await db.collection('donations').doc(req.params.id).get();
+    res.json({ id: doc.id, ...doc.data() });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update' });
+  }
+});
+
+app.delete('/api/donations/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('donations').doc(req.params.id).delete();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
+
+app.get('/api/members', async (req: Request, res: Response) => {
+  try {
+    const snapshot = await db.collection('members').get();
+    if (snapshot.empty && members && members.length > 0) {
+      for (const item of members) {
+        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await db.collection('members').doc(docId).set(item);
+      }
+      const newSnap = await db.collection('members').get();
+      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }
+    res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch data' });
+  }
+});
+
+app.post('/api/members', async (req: Request, res: Response) => {
+  try {
+    const docRef = db.collection('members').doc();
+    const body = req.body;
+    const newItem = { id: docRef.id, joinedDate: new Date().toISOString().split("T")[0], ...body };
+    await docRef.set(newItem);
+    res.status(201).json(newItem);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create' });
+  }
+});
+
+app.put('/api/members/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('members').doc(req.params.id).set(req.body, { merge: true });
+    const doc = await db.collection('members').doc(req.params.id).get();
+    res.json({ id: doc.id, ...doc.data() });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update' });
+  }
+});
+
+app.delete('/api/members/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('members').doc(req.params.id).delete();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
+
+app.get('/api/ministries', async (req: Request, res: Response) => {
+  try {
+    const snapshot = await db.collection('ministries').get();
+    if (snapshot.empty && ministries && ministries.length > 0) {
+      for (const item of ministries) {
+        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await db.collection('ministries').doc(docId).set(item);
+      }
+      const newSnap = await db.collection('ministries').get();
+      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }
+    res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch data' });
+  }
+});
+
+app.post('/api/ministries', async (req: Request, res: Response) => {
+  try {
+    const docRef = db.collection('ministries').doc();
+    const body = req.body;
+    const newItem = { id: docRef.id, ...body };
+    await docRef.set(newItem);
+    res.status(201).json(newItem);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create' });
+  }
+});
+
+app.put('/api/ministries/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('ministries').doc(req.params.id).set(req.body, { merge: true });
+    const doc = await db.collection('ministries').doc(req.params.id).get();
+    res.json({ id: doc.id, ...doc.data() });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update' });
+  }
+});
+
+app.delete('/api/ministries/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('ministries').doc(req.params.id).delete();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
+
+app.get('/api/v2/branches', async (req: Request, res: Response) => {
+  try {
+    const snapshot = await db.collection('branches').get();
+    if (snapshot.empty && branches && branches.length > 0) {
+      for (const item of branches) {
+        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await db.collection('branches').doc(docId).set(item);
+      }
+      const newSnap = await db.collection('branches').get();
+      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }
+    res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch data' });
+  }
+});
+
+app.post('/api/v2/branches', async (req: Request, res: Response) => {
+  try {
+    const docRef = db.collection('branches').doc();
+    const body = req.body;
+    const newItem = { id: docRef.id, ...body };
+    await docRef.set(newItem);
+    res.status(201).json(newItem);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create' });
+  }
+});
+
+app.put('/api/v2/branches/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('branches').doc(req.params.id).set(req.body, { merge: true });
+    const doc = await db.collection('branches').doc(req.params.id).get();
+    res.json({ id: doc.id, ...doc.data() });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update' });
+  }
+});
+
+app.delete('/api/v2/branches/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('branches').doc(req.params.id).delete();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
+
+app.get('/api/v2/education/schools', async (req: Request, res: Response) => {
+  try {
+    const snapshot = await db.collection('schools').get();
+    if (snapshot.empty && schoolInstitutions && schoolInstitutions.length > 0) {
+      for (const item of schoolInstitutions) {
+        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await db.collection('schools').doc(docId).set(item);
+      }
+      const newSnap = await db.collection('schools').get();
+      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }
+    res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch data' });
+  }
+});
+
+app.post('/api/v2/education/schools', async (req: Request, res: Response) => {
+  try {
+    const docRef = db.collection('schools').doc();
+    const body = req.body;
+    const newItem = { id: docRef.id, ...body };
+    await docRef.set(newItem);
+    res.status(201).json(newItem);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create' });
+  }
+});
+
+app.put('/api/v2/education/schools/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('schools').doc(req.params.id).set(req.body, { merge: true });
+    const doc = await db.collection('schools').doc(req.params.id).get();
+    res.json({ id: doc.id, ...doc.data() });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update' });
+  }
+});
+
+app.delete('/api/v2/education/schools/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('schools').doc(req.params.id).delete();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
+
+app.get('/api/v2/media/radio', async (req: Request, res: Response) => {
+  try {
+    const snapshot = await db.collection('radio').get();
+    if (snapshot.empty && broadcastStations && broadcastStations.length > 0) {
+      for (const item of broadcastStations) {
+        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await db.collection('radio').doc(docId).set(item);
+      }
+      const newSnap = await db.collection('radio').get();
+      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }
+    res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch data' });
+  }
+});
+
+app.post('/api/v2/media/radio', async (req: Request, res: Response) => {
+  try {
+    const docRef = db.collection('radio').doc();
+    const body = req.body;
+    const newItem = { id: docRef.id, ...body };
+    await docRef.set(newItem);
+    res.status(201).json(newItem);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create' });
+  }
+});
+
+app.put('/api/v2/media/radio/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('radio').doc(req.params.id).set(req.body, { merge: true });
+    const doc = await db.collection('radio').doc(req.params.id).get();
+    res.json({ id: doc.id, ...doc.data() });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update' });
+  }
+});
+
+app.delete('/api/v2/media/radio/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('radio').doc(req.params.id).delete();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
+
+app.get('/api/v2/store/products', async (req: Request, res: Response) => {
+  try {
+    const snapshot = await db.collection('products').get();
+    if (snapshot.empty && bookstoreProducts && bookstoreProducts.length > 0) {
+      for (const item of bookstoreProducts) {
+        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await db.collection('products').doc(docId).set(item);
+      }
+      const newSnap = await db.collection('products').get();
+      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }
+    res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch data' });
+  }
+});
+
+app.post('/api/v2/store/products', async (req: Request, res: Response) => {
+  try {
+    const docRef = db.collection('products').doc();
+    const body = req.body;
+    const newItem = { id: docRef.id, ...body };
+    await docRef.set(newItem);
+    res.status(201).json(newItem);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create' });
+  }
+});
+
+app.put('/api/v2/store/products/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('products').doc(req.params.id).set(req.body, { merge: true });
+    const doc = await db.collection('products').doc(req.params.id).get();
+    res.json({ id: doc.id, ...doc.data() });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update' });
+  }
+});
+
+app.delete('/api/v2/store/products/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('products').doc(req.params.id).delete();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
+
+app.get('/api/v2/community/projects', async (req: Request, res: Response) => {
+  try {
+    const snapshot = await db.collection('projects').get();
+    if (snapshot.empty && communityProjects && communityProjects.length > 0) {
+      for (const item of communityProjects) {
+        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await db.collection('projects').doc(docId).set(item);
+      }
+      const newSnap = await db.collection('projects').get();
+      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }
+    res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch data' });
+  }
+});
+
+app.post('/api/v2/community/projects', async (req: Request, res: Response) => {
+  try {
+    const docRef = db.collection('projects').doc();
+    const body = req.body;
+    const newItem = { id: docRef.id, ...body };
+    await docRef.set(newItem);
+    res.status(201).json(newItem);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create' });
+  }
+});
+
+app.put('/api/v2/community/projects/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('projects').doc(req.params.id).set(req.body, { merge: true });
+    const doc = await db.collection('projects').doc(req.params.id).get();
+    res.json({ id: doc.id, ...doc.data() });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update' });
+  }
+});
+
+app.delete('/api/v2/community/projects/:id', async (req: Request, res: Response) => {
+  try {
+    await db.collection('projects').doc(req.params.id).delete();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
