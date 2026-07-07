@@ -949,55 +949,20 @@ app.get('/api/assets', async (req: Request, res: Response) => {
     
     // 1. Fetch from Firestore
     try {
-      if (clientDb) {
-        const snapshot = await db.collection('assets').get();
-        snapshot.docs.forEach(docSnap => {
-          const d = docSnap.data();
-          list.push({
-            id: docSnap.id,
-            name: d.name || docSnap.id,
-            contentType: d.contentType || 'image/png',
-            updatedAt: d.updatedAt || new Date().toISOString(),
-            url: `/api/assets/${docSnap.id}`
-          });
+      const snapshot = await db.collection('assets').get();
+      snapshot.docs.forEach(docSnap => {
+        const d = docSnap.data();
+        list.push({
+          id: docSnap.id,
+          name: d.name || docSnap.id,
+          contentType: d.contentType || 'image/png',
+          updatedAt: d.updatedAt || new Date().toISOString(),
+          url: `/api/assets/${docSnap.id}`
         });
-      }
+      });
     } catch (fsErr) {
-      console.warn('Failed listing assets from Firestore:', fsErr);
-    }
-
-    // 2. Supplement from local uploads directory
-    if (fs.existsSync(uploadsDir)) {
-      try {
-        const files = fs.readdirSync(uploadsDir);
-        files.forEach(file => {
-          // If file is not already in list by starting name prefix, add it
-          const fileId = path.basename(file, path.extname(file));
-          if (!list.some(item => item.id === fileId || item.name === file)) {
-            const ext = path.extname(file).toLowerCase();
-            let contentType = 'image/png';
-            if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
-            else if (ext === '.gif') contentType = 'image/gif';
-            else if (ext === '.webp') contentType = 'image/webp';
-            else if (ext === '.svg') contentType = 'image/svg+xml';
-            else if (ext === '.mp3') contentType = 'audio/mpeg';
-            else if (ext === '.wav') contentType = 'audio/wav';
-            else if (ext === '.pdf') contentType = 'application/pdf';
-
-            const stats = fs.statSync(path.join(uploadsDir, file));
-
-            list.push({
-              id: fileId,
-              name: file,
-              contentType,
-              updatedAt: stats.mtime.toISOString(),
-              url: `/api/assets/${fileId}`
-            });
-          }
-        });
-      } catch (dirErr) {
-        console.error('Failed reading uploads directory for asset listing:', dirErr);
-      }
+      console.error('Failed listing assets from Firestore:', fsErr);
+      return res.status(500).json({ error: 'Failed to list assets from database' });
     }
 
     // Sort by updatedAt descending
@@ -1014,36 +979,10 @@ app.delete('/api/assets/:id', async (req: Request, res: Response) => {
     const id = req.params.id;
     console.log(`Deleting asset ${id}...`);
 
-    // 1. Delete from Firestore
     try {
-      if (clientDb) {
-        await db.collection('assets').doc(id).delete();
-      }
+      await db.collection('assets').doc(id).delete();
     } catch (fsErr) {
       console.warn(`Firestore delete failed for asset ${id}:`, fsErr);
-    }
-
-    // 2. Delete from local disk
-    if (fs.existsSync(uploadsDir)) {
-      try {
-        const files = fs.readdirSync(uploadsDir);
-        const matchedFile = files.find(f => f.startsWith(id));
-        if (matchedFile) {
-          const localPath = path.join(uploadsDir, matchedFile);
-          fs.unlinkSync(localPath);
-          console.log(`Deleted local file: ${matchedFile}`);
-        }
-      } catch (dirErr) {
-        console.error(`Failed deleting local file for asset ${id}:`, dirErr);
-      }
-    }
-
-    // 3. Delete from memory cache
-    inMemoryUploads.delete(id);
-    for (const [key] of inMemoryUploads.entries()) {
-      if (key.startsWith(id)) {
-        inMemoryUploads.delete(key);
-      }
     }
 
     res.json({ success: true });
@@ -1100,24 +1039,6 @@ app.post('/api/images/upload', async (req: Request, res: Response) => {
 
     // Decode base64 to buffer using safe helper
     const { contentType, buffer } = parseBase64DataUrl(base64);
-
-    // Always try to write to local disk first
-    let savedLocally = false;
-    try {
-      if (!fs.existsSync(uploadsDir)) {
-        fs.mkdirSync(uploadsDir, { recursive: true });
-      }
-      const localPath = path.join(uploadsDir, filename);
-      fs.writeFileSync(localPath, buffer);
-      console.log(`Saved uploaded file to local disk: ${filename}`);
-      savedLocally = true;
-    } catch (writeErr) {
-      console.error('Failed to write uploaded file to disk:', writeErr);
-    }
-
-    // Always cache in memory for bulletproof resiliency
-    inMemoryUploads.set(filename, { contentType, buffer });
-    inMemoryUploads.set(docId, { contentType, buffer });
 
     const fileSize = buffer.length;
     console.log(`Uploaded file size: ${fileSize} bytes`);
@@ -1180,7 +1101,7 @@ app.post('/api/images/upload', async (req: Request, res: Response) => {
 
     // Return the dynamic api URL so it works on Vercel
     const publicUrl = `/api/assets/${docId}`;
-    return res.json({ success: true, url: publicUrl, persistedInFirestore, uploadedToStorage, savedLocally });
+    return res.json({ success: true, url: publicUrl, persistedInFirestore, uploadedToStorage });
   } catch (err: any) {
     console.error('File Upload Error:', err.stack || err);
     res.status(500).json({ error: err.message || 'Failed to save uploaded file', stack: err.stack || String(err) });
@@ -1210,13 +1131,25 @@ app.get('/api/assets/:id', async (req: Request, res: Response) => {
           }
         }
 
-        if (!buffer && data.storagePath && adminStorage) {
-          try {
-            const bucket = adminStorage.bucket();
-            const fileRef = bucket.file(data.storagePath);
-            const [downloadedBuffer] = await fileRef.download();
-            buffer = downloadedBuffer;
-          } catch (e) {}
+        if (!buffer && data.storagePath) {
+          if (adminStorage) {
+            try {
+              const bucket = adminStorage.bucket();
+              const fileRef = bucket.file(data.storagePath);
+              const [downloadedBuffer] = await fileRef.download();
+              buffer = downloadedBuffer;
+            } catch (e) {
+              console.warn(`Failed to download ${data.storagePath} from admin storage`, e);
+            }
+          } else if (storage && !isStorageDisabled) {
+            try {
+              const fileRef = storageRef(storage, data.storagePath);
+              const downloadedArrayBuffer = await getBytes(fileRef);
+              buffer = Buffer.from(downloadedArrayBuffer);
+            } catch (e) {
+              console.warn(`Failed to download ${data.storagePath} from client storage`, e);
+            }
+          }
         }
 
         if (buffer) {
@@ -1228,64 +1161,6 @@ app.get('/api/assets/:id', async (req: Request, res: Response) => {
     } catch (fsCheckErr) {
       console.warn('Firestore asset check failed:', fsCheckErr);
     }
-    
-    // 2. Try serving from in-memory uploads cache
-    const matchedInMemoryKey = Array.from(inMemoryUploads.keys()).find(k => k.startsWith(id));
-    if (matchedInMemoryKey) {
-      const item = inMemoryUploads.get(matchedInMemoryKey);
-      if (item) {
-        res.setHeader('Content-Type', item.contentType);
-        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-        return res.send(item.buffer);
-      }
-    }
-
-    // 3. Try to serve from local uploads disk
-    if (fs.existsSync(uploadsDir)) {
-      try {
-        const files = fs.readdirSync(uploadsDir);
-        const matchedFile = files.find(f => f.startsWith(id));
-        if (matchedFile) {
-          const localPath = path.join(uploadsDir, matchedFile);
-          const ext = path.extname(matchedFile).toLowerCase();
-          let contentType = 'image/png';
-          if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
-          else if (ext === '.gif') contentType = 'image/gif';
-          else if (ext === '.webp') contentType = 'image/webp';
-          else if (ext === '.svg') contentType = 'image/svg+xml';
-          
-          res.setHeader('Content-Type', contentType);
-          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-          return res.sendFile(localPath);
-        }
-      } catch (dirErr) {
-        console.error('Failed reading uploads directory:', dirErr);
-      }
-    }
-
-    // Also try to look in the main public directory
-    if (fs.existsSync(publicDir)) {
-      try {
-        const files = fs.readdirSync(publicDir);
-        const matchedFile = files.find(f => f.startsWith(id));
-        if (matchedFile) {
-          const localPath = path.join(publicDir, matchedFile);
-          const ext = path.extname(matchedFile).toLowerCase();
-          let contentType = 'image/png';
-          if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
-          else if (ext === '.gif') contentType = 'image/gif';
-          else if (ext === '.webp') contentType = 'image/webp';
-          else if (ext === '.svg') contentType = 'image/svg+xml';
-          
-          res.setHeader('Content-Type', contentType);
-          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-          return res.sendFile(localPath);
-        }
-      } catch (dirErr) {
-        console.error('Failed reading public directory:', dirErr);
-      }
-    }
-
     return res.status(404).send('Asset not found');
   } catch (err) {
     console.error('File fetch error:', err);
