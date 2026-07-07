@@ -2556,7 +2556,11 @@ async function backupLocalImagesToFirestore() {
 // Configure Vite or Static Serve
 async function startServer() {
   // Load persistent configurations from Firestore on startup
-  await loadPersistentConfig();
+  try {
+    await loadPersistentConfig();
+  } catch (e) {
+    console.warn('Load persistent config error:', e);
+  }
 
   // Run the automatic backup task
   try {
@@ -2565,31 +2569,45 @@ async function startServer() {
     console.error('Error running backupLocalImagesToFirestore:', backupErr);
   }
 
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
+  if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+    try {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } catch (e) {
+      console.warn('Vite middleware setup warning:', e);
+    }
+  } else if (!process.env.VERCEL) {
     // Serve static directory
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req: Request, res: Response) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get('*', (req: Request, res: Response) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
   }
 
-  const PORT = 3000;
-  await seedDatabaseIfEmpty();
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Fonteyn Evangelical Church Server running on http://0.0.0.0:${PORT}`);
-  });
+  try {
+    await seedDatabaseIfEmpty();
+  } catch (e) {
+    console.warn('Seed database warning:', e);
+  }
+
+  // Only call app.listen if NOT on Vercel serverless
+  if (!process.env.VERCEL) {
+    const PORT = 3000;
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Fonteyn Evangelical Church Server running on http://0.0.0.0:${PORT}`);
+    });
+  }
 }
 
+// In Vercel serverless, startServer runs as promise/background without blocking handler
 startServer().catch(err => {
   console.error('Failed to start server:', err);
-  process.exit(1);
 });
 
 export default app;
