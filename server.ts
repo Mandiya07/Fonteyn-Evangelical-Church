@@ -1153,18 +1153,18 @@ app.post('/api/images/upload', async (req: Request, res: Response) => {
         updatedAt: new Date().toISOString()
       };
       
-      // Store base64 inside Firestore only if it's within safe boundaries (< 700KB)
-      if (base64.length <= 700000) {
+      // Store base64 inside Firestore up to 950KB for stateless serverless/Vercel persistence
+      if (base64.length <= 950000) {
         docData.base64 = base64;
       } else {
-        console.log(`Base64 size (${base64.length} chars) is too large for Firestore document. Relying on in-memory/disk/storage cache.`);
+        console.log(`Base64 size (${base64.length} chars) is large. Attempting storage fallback.`);
       }
 
       await db.collection('assets').doc(docId).set(docData);
       persistedInFirestore = true;
       console.log(`Asset metadata for doc ${docId} persisted in Firestore`);
     } catch (fsErr) {
-      console.warn(`Firestore asset doc save failed for ${docId} (non-fatal, in-memory cache is active):`, fsErr);
+      console.warn(`Firestore asset doc save failed for ${docId}:`, fsErr);
     }
 
     // Return the dynamic api URL so it works on Vercel
@@ -1179,8 +1179,46 @@ app.post('/api/images/upload', async (req: Request, res: Response) => {
 app.get('/api/assets/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
+    const docId = id.replace(/\.[^/.]+$/, ""); // strip extension if present
+
+    // 1. Check Firestore first (crucial for stateless serverless/Vercel deployments)
+    try {
+      const doc = await db.collection('assets').doc(docId).get();
+      if (doc.exists) {
+        const data = doc.data() as any;
+        let contentType = data.contentType || 'image/png';
+        let buffer: Buffer | null = null;
+
+        if (data.base64) {
+          try {
+            const parsed = parseBase64DataUrl(data.base64);
+            contentType = parsed.contentType;
+            buffer = parsed.buffer;
+          } catch (e) {
+            console.error('Failed to parse inline base64 from Firestore document:', e);
+          }
+        }
+
+        if (!buffer && data.storagePath && adminStorage) {
+          try {
+            const bucket = adminStorage.bucket();
+            const fileRef = bucket.file(data.storagePath);
+            const [downloadedBuffer] = await fileRef.download();
+            buffer = downloadedBuffer;
+          } catch (e) {}
+        }
+
+        if (buffer) {
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          return res.send(buffer);
+        }
+      }
+    } catch (fsCheckErr) {
+      console.warn('Firestore asset check failed:', fsCheckErr);
+    }
     
-    // 0. Try serving from in-memory uploads cache first
+    // 2. Try serving from in-memory uploads cache
     const matchedInMemoryKey = Array.from(inMemoryUploads.keys()).find(k => k.startsWith(id));
     if (matchedInMemoryKey) {
       const item = inMemoryUploads.get(matchedInMemoryKey);
@@ -1191,7 +1229,7 @@ app.get('/api/assets/:id', async (req: Request, res: Response) => {
       }
     }
 
-    // 1. Try to serve from local uploads disk first
+    // 3. Try to serve from local uploads disk
     if (fs.existsSync(uploadsDir)) {
       try {
         const files = fs.readdirSync(uploadsDir);
@@ -1237,117 +1275,7 @@ app.get('/api/assets/:id', async (req: Request, res: Response) => {
       }
     }
 
-    // 2. Fallback: Fetch from Firestore assets collection
-    const docId = id.replace(/\.[^/.]+$/, ""); // strip extension if present
-    const doc = await db.collection('assets').doc(docId).get();
-    if (doc.exists) {
-      const data = doc.data() as any;
-      
-      let contentType = data.contentType || 'image/png';
-      let buffer: Buffer | null = null;
-
-      // Try reading inline base64 if available
-      if (data.base64) {
-        try {
-          const parsed = parseBase64DataUrl(data.base64);
-          contentType = parsed.contentType;
-          buffer = parsed.buffer;
-        } catch (e) {
-          console.error('Failed to parse inline base64 from Firestore document:', e);
-        }
-      }
-
-      // Try serving from Firebase Storage (Admin SDK) via public URL
-      if (data.storagePath) {
-        if (adminStorage) {
-          try {
-            console.log(`Redirecting to Firebase Storage public URL for ${data.storagePath} (Admin SDK)...`);
-            const bucket = adminStorage.bucket();
-            const fileRef = bucket.file(data.storagePath);
-            
-            // Generate a signed URL that's valid for 1 hour to ensure access even if bucket isn't fully public
-            const [url] = await fileRef.getSignedUrl({
-              version: 'v4',
-              action: 'read',
-              expires: Date.now() + 60 * 60 * 1000, // 1 hour
-            });
-            
-            return res.redirect(302, url);
-          } catch (adminStorageErr: any) {
-            console.warn(`Admin SDK signed URL generation failed for ${data.storagePath}:`, adminStorageErr.message);
-          }
-        }
-        
-        if (!buffer && storage && !isStorageDisabled) {
-          try {
-            console.log(`Downloading ${data.storagePath} from Firebase Storage (Client SDK) for asset ${docId}...`);
-            const fileRef = storageRef(storage, data.storagePath);
-            const arrayBuffer = await getBytes(fileRef);
-            buffer = Buffer.from(arrayBuffer);
-            console.log(`Successfully downloaded ${buffer.length} bytes from Firebase Storage (Client).`);
-          } catch (storageErr) {
-            console.warn(`Failed to download from Firebase Storage Client SDK for path ${data.storagePath}:`, storageErr);
-          }
-        }
-      }
-
-      // Fallback: If still no buffer, try checking potential paths on Storage
-      if (!buffer) {
-        const possiblePaths = [`assets/${id}`];
-        if (data.name) {
-          possiblePaths.push(`assets/${data.name}`);
-        }
-        
-        for (const sPath of possiblePaths) {
-          if (adminStorage) {
-            try {
-              console.log(`Trying fallback Admin SDK download from Firebase Storage path: ${sPath}`);
-              const bucket = adminStorage.bucket();
-              const fileRef = bucket.file(sPath);
-              const [downloadedBuffer] = await fileRef.download();
-              buffer = downloadedBuffer;
-              console.log(`Successfully retrieved fallback via Admin SDK.`);
-              break;
-            } catch (e) {}
-          }
-          
-          if (!buffer && storage && !isStorageDisabled) {
-            try {
-              console.log(`Trying fallback Client SDK download from Firebase Storage path: ${sPath}`);
-              const fileRef = storageRef(storage, sPath);
-              const arrayBuffer = await getBytes(fileRef);
-              buffer = Buffer.from(arrayBuffer);
-              console.log(`Successfully retrieved fallback via Client SDK.`);
-              break;
-            } catch (e) {}
-          }
-        }
-      }
-
-      if (buffer) {
-        // Cache to local disk for future requests
-        try {
-          const mimeExt = contentType.split('/')[1] || 'png';
-          const ext = mimeExt === 'jpeg' ? '.jpg' : `.${mimeExt}`;
-          const localPath = path.join(uploadsDir, `${id}${ext}`);
-          if (!fs.existsSync(uploadsDir)) {
-            fs.mkdirSync(uploadsDir, { recursive: true });
-          }
-          fs.writeFileSync(localPath, buffer);
-          console.log(`Cached file from Firestore/Storage to local disk: ${id}${ext}`);
-        } catch (writeErr) {
-          console.error('Failed to cache file to disk:', writeErr);
-        }
-
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-        return res.send(buffer);
-      } else {
-        return res.status(404).send('Data buffer could not be retrieved');
-      }
-    } else {
-      res.status(404).send('Not found');
-    }
+    return res.status(404).send('Asset not found');
   } catch (err) {
     console.error('File fetch error:', err);
     res.status(500).send('Server Error');
