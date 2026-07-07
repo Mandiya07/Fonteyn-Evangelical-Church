@@ -1044,23 +1044,45 @@ app.delete('/api/assets/:id', async (req: Request, res: Response) => {
 
 app.post('/api/images/upload', async (req: Request, res: Response) => {
   console.log('--- HIT /api/images/upload ---');
-  let name = req.body?.name || req.body?.filename || req.body?.fileName || req.body?.title;
-  let base64 = req.body?.base64 || req.body?.image || req.body?.file || req.body?.data || req.body?.content;
+  let bodyData = req.body;
 
-  // Handle if req.body is a raw binary Buffer (e.g. from express.raw)
-  if (Buffer.isBuffer(req.body)) {
-    base64 = req.body.toString('base64');
+  // If body is missing or empty (common in some serverless environments like Vercel), read the stream raw
+  if (!bodyData || (typeof bodyData === 'object' && Object.keys(bodyData).length === 0)) {
+    try {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req as any) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      const rawBody = Buffer.concat(chunks).toString('utf8');
+      if (rawBody) {
+        try {
+          bodyData = JSON.parse(rawBody);
+        } catch {
+          bodyData = rawBody;
+        }
+      }
+    } catch (streamErr) {
+      console.warn('Failed to read request stream manually:', streamErr);
+    }
   }
 
-  // Fallback if req.body is a raw string
-  if (!base64 && typeof req.body === 'string') {
+  let name = bodyData?.name || bodyData?.filename || bodyData?.fileName || bodyData?.title;
+  let base64 = bodyData?.base64 || bodyData?.image || bodyData?.file || bodyData?.data || bodyData?.content;
+
+  // Handle if bodyData is a raw binary Buffer (e.g. from express.raw)
+  if (Buffer.isBuffer(bodyData)) {
+    base64 = bodyData.toString('base64');
+  }
+
+  // Fallback if bodyData is a raw string
+  if (!base64 && typeof bodyData === 'string') {
     try {
-      const parsed = JSON.parse(req.body);
+      const parsed = JSON.parse(bodyData);
       name = name || parsed.name || parsed.filename || parsed.fileName || parsed.title;
       base64 = parsed.base64 || parsed.image || parsed.file || parsed.data || parsed.content;
     } catch (e) {
-      if (req.body.startsWith('data:') || req.body.length > 50) {
-        base64 = req.body;
+      if (bodyData.startsWith('data:') || bodyData.length > 50) {
+        base64 = bodyData;
       }
     }
   }
@@ -1099,6 +1121,7 @@ app.post('/api/images/upload', async (req: Request, res: Response) => {
 
     // Always cache in memory for bulletproof resiliency
     inMemoryUploads.set(filename, { contentType, buffer });
+    inMemoryUploads.set(docId, { contentType, buffer });
 
     const fileSize = buffer.length;
     console.log(`Uploaded file size: ${fileSize} bytes`);
@@ -1172,6 +1195,17 @@ app.get('/api/assets/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
     
+    // 0. Try serving from in-memory uploads cache first
+    const matchedInMemoryKey = Array.from(inMemoryUploads.keys()).find(k => k.startsWith(id));
+    if (matchedInMemoryKey) {
+      const item = inMemoryUploads.get(matchedInMemoryKey);
+      if (item) {
+        res.setHeader('Content-Type', item.contentType);
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        return res.send(item.buffer);
+      }
+    }
+
     // 1. Try to serve from local uploads disk first
     if (fs.existsSync(uploadsDir)) {
       try {
