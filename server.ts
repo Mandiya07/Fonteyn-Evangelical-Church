@@ -1046,49 +1046,34 @@ app.post('/api/images/upload', async (req: Request, res: Response) => {
   console.log('--- HIT /api/images/upload ---');
   let bodyData = req.body;
 
-  // If body is missing or empty (common in some serverless environments like Vercel), read the stream raw
-  if (!bodyData || (typeof bodyData === 'object' && Object.keys(bodyData).length === 0)) {
+  if (typeof bodyData === 'string') {
     try {
-      const chunks: Buffer[] = [];
-      for await (const chunk of req as any) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      }
-      const rawBody = Buffer.concat(chunks).toString('utf8');
-      if (rawBody) {
-        try {
-          bodyData = JSON.parse(rawBody);
-        } catch {
-          bodyData = rawBody;
-        }
-      }
-    } catch (streamErr) {
-      console.warn('Failed to read request stream manually:', streamErr);
+      bodyData = JSON.parse(bodyData);
+    } catch {
+      bodyData = { base64: bodyData };
     }
+  }
+
+  if (Buffer.isBuffer(bodyData)) {
+    bodyData = { base64: bodyData.toString('base64') };
   }
 
   let name = bodyData?.name || bodyData?.filename || bodyData?.fileName || bodyData?.title;
   let base64 = bodyData?.base64 || bodyData?.image || bodyData?.file || bodyData?.data || bodyData?.content;
 
-  // Handle if bodyData is a raw binary Buffer (e.g. from express.raw)
-  if (Buffer.isBuffer(bodyData)) {
-    base64 = bodyData.toString('base64');
-  }
-
-  // Fallback if bodyData is a raw string
-  if (!base64 && typeof bodyData === 'string') {
-    try {
-      const parsed = JSON.parse(bodyData);
-      name = name || parsed.name || parsed.filename || parsed.fileName || parsed.title;
-      base64 = parsed.base64 || parsed.image || parsed.file || parsed.data || parsed.content;
-    } catch (e) {
-      if (bodyData.startsWith('data:') || bodyData.length > 50) {
-        base64 = bodyData;
+  if (!base64 && bodyData && typeof bodyData === 'object') {
+    for (const key of Object.keys(bodyData)) {
+      const val = bodyData[key];
+      if (typeof val === 'string' && (val.startsWith('data:') || val.length > 100)) {
+        base64 = val;
+        break;
       }
     }
   }
 
   if (!base64) {
-    return res.status(400).json({ error: 'Base64 content is required.' });
+    console.error('Upload error: Base64 content is missing. req.body type:', typeof req.body, 'keys:', req.body ? Object.keys(req.body) : 'none');
+    return res.status(400).json({ error: 'Base64 image content is required.' });
   }
   if (!name) {
     name = 'uploaded_image.png';
