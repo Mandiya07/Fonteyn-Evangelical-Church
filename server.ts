@@ -964,23 +964,73 @@ app.post('/api/images/update', async (req: Request, res: Response) => {
 app.get('/api/assets', async (req: Request, res: Response) => {
   try {
     const list: any[] = [];
+    const seenIds = new Set<string>();
     
     // 1. Fetch from Firestore
     try {
       const snapshot = await db.collection('assets').get();
       snapshot.docs.forEach(docSnap => {
         const d = docSnap.data();
-        list.push({
-          id: docSnap.id,
-          name: d.name || docSnap.id,
-          contentType: d.contentType || 'image/png',
-          updatedAt: d.updatedAt || new Date().toISOString(),
-          url: `/api/assets/${docSnap.id}`
-        });
+        if (d) {
+          seenIds.add(docSnap.id);
+          list.push({
+            id: docSnap.id,
+            name: d.name || docSnap.id,
+            contentType: d.contentType || 'image/png',
+            updatedAt: d.updatedAt || new Date().toISOString(),
+            url: `/api/assets/${docSnap.id}`
+          });
+        }
       });
     } catch (fsErr) {
-      console.error('Failed listing assets from Firestore:', fsErr);
-      return res.status(500).json({ error: 'Failed to list assets from database' });
+      console.warn('Failed listing assets from Firestore, falling back to local/in-memory cache:', fsErr);
+    }
+
+    // 2. Fallback / supplement with inMemoryUploads & local uploadsDir if Firestore empty or failed
+    try {
+      inMemoryUploads.forEach((val, filename) => {
+        const ext = path.extname(filename);
+        const docId = path.basename(filename, ext);
+        if (!seenIds.has(docId)) {
+          seenIds.add(docId);
+          list.push({
+            id: docId,
+            name: filename,
+            contentType: val.contentType,
+            updatedAt: new Date().toISOString(),
+            url: `/api/assets/${docId}`
+          });
+        }
+      });
+
+      if (fs.existsSync(uploadsDir)) {
+        const localFiles = fs.readdirSync(uploadsDir);
+        localFiles.forEach(file => {
+          if (file.startsWith('.')) return;
+          const ext = path.extname(file);
+          const docId = path.basename(file, ext);
+          if (!seenIds.has(docId)) {
+            seenIds.add(docId);
+            const stats = fs.statSync(path.join(uploadsDir, file));
+            let mime = 'image/png';
+            if (ext === '.jpg' || ext === '.jpeg') mime = 'image/jpeg';
+            else if (ext === '.svg') mime = 'image/svg+xml';
+            else if (ext === '.mp3') mime = 'audio/mpeg';
+            else if (ext === '.wav') mime = 'audio/wav';
+            else if (ext === '.pdf') mime = 'application/pdf';
+
+            list.push({
+              id: docId,
+              name: file,
+              contentType: mime,
+              updatedAt: stats.mtime.toISOString(),
+              url: `/api/assets/${docId}`
+            });
+          }
+        });
+      }
+    } catch (localErr) {
+      console.warn('Error reading local/in-memory assets:', localErr);
     }
 
     // Sort by updatedAt descending
@@ -1060,6 +1110,17 @@ app.post('/api/images/upload', async (req: Request, res: Response) => {
 
     const fileSize = buffer.length;
     console.log(`Uploaded file size: ${fileSize} bytes`);
+
+    // Always cache in memory & save to local uploads directory for bulletproof reliability
+    inMemoryUploads.set(filename, { contentType, buffer });
+    try {
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+      fs.writeFileSync(path.join(uploadsDir, filename), buffer);
+    } catch (localWriteErr) {
+      console.warn('Failed to write uploaded file to local disk:', localWriteErr);
+    }
 
     // Try uploading to Firebase Storage (prioritize Admin SDK)
     let uploadedToStorage = false;
