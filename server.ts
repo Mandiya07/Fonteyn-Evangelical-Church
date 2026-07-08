@@ -921,6 +921,29 @@ const saveImageConfig = async () => {
   }
 };
 
+app.get('/api/diagnostic', async (req: Request, res: Response) => {
+  let demoDataCount = 0;
+  try {
+    const snap = await db.collection('assets').get();
+    demoDataCount = snap.size || 0;
+  } catch (e) {
+    // ignore
+  }
+
+  res.json({
+    projectId: firebaseConfig?.projectId || 'unknown',
+    adminSdk: !!adminDb,
+    clientSdk: !!clientDb,
+    restApi: true,
+    demoDataCount,
+    storageBucket: firebaseConfig?.storageBucket || null,
+    adminStorage: !!adminStorage,
+    clientStorage: !!storage,
+    isVercel: process.env.VERCEL === '1' || process.env.NODE_ENV === 'production',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Images API Endpoints
 app.get('/api/images', async (req: Request, res: Response) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
