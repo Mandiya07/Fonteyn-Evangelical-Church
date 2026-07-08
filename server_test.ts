@@ -41,7 +41,7 @@ let adminStorage: any = null;
 let isAdminInitialized = false;
 
 try {
-  const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+  const serviceAccountKey = undefined;
   const bucketName = firebaseConfig?.storageBucket || (firebaseConfig?.projectId ? `${firebaseConfig.projectId}.firebasestorage.app` : undefined);
 
   if (serviceAccountKey) {
@@ -54,7 +54,7 @@ try {
     adminStorage = getAdminStorage(adminApp);
     isAdminInitialized = true;
     console.log('Firebase Admin SDK initialized successfully via FIREBASE_SERVICE_ACCOUNT_KEY env variable.');
-  } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  } else if (false) {
     const adminApp = admin.initializeApp({
       credential: admin.credential.applicationDefault(),
       storageBucket: bucketName
@@ -98,7 +98,7 @@ console.log('Firebase Client SDK initialized:', !!clientDb);
 
 const storage = firebaseApp ? getStorage(firebaseApp) : null;
 console.log('Firebase Storage SDK initialized:', !!storage);
-let isStorageDisabled = !firebaseConfig?.storageBucket;
+let isStorageDisabled = false;
 
 const db = {
   collection(collectionName: string) {
@@ -1089,7 +1089,7 @@ app.post('/api/images/upload', async (req: Request, res: Response) => {
         console.log(`Successfully uploaded ${filename} to Firebase Storage as assets/${filename}`);
       } catch (storageErr) {
         isStorageDisabled = true;
-        console.log(`Firebase Storage Client SDK not active. Using robust Firestore document persistence.`);
+        console.warn(`Firebase Storage Client SDK is not enabled or permission is denied. Gracefully falling back to robust Firestore document persistence. Info:`, storageErr);
       }
     }
 
@@ -2363,7 +2363,7 @@ async function backupLocalImagesToFirestore() {
               console.log(`Successfully backed up local file ${file} to Firebase Storage.`);
             } catch (storageErr) {
               isStorageDisabled = true;
-              console.log(`Firebase Storage not active. Using Firestore document backup.`);
+              console.warn(`Firebase Storage is not enabled or permission is denied. Skipping Storage backups and gracefully using Firestore document backup. Info:`, storageErr);
             }
           }
 

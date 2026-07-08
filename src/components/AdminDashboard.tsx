@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import DiagnosticTool from './DiagnosticTool';
 import { 
   Users, Calendar, Video, HeartHandshake, DollarSign, 
   MessageSquare, FileText, ImageIcon, ShieldCheck, 
@@ -652,6 +653,7 @@ export default function AdminDashboard({ language }: AdminDashboardProps) {
           
           {activeTab === 'overview' && (
             <div className="animate-fade-in space-y-8">
+              <DiagnosticTool />
                <button
                 onClick={handleForceRefresh}
                 className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition"
