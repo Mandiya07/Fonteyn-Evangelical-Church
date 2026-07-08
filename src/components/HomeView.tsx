@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Shield, Compass, CheckCircle, CreditCard, Send, Printer, BookOpen, Video, Headphones, Download, Share2, FileText, MapPin, Clock, Quote, Sparkles, RefreshCw, User } from 'lucide-react';
 import { useAppImages } from './ImageContext';
+import DailyScripture from './DailyScripture';
 
 interface HomeViewProps {
   setCurrentTab: (tab: string) => void;
@@ -340,8 +341,8 @@ export default function HomeView({ setCurrentTab, language, onNewDonation, onNew
             </p>
           </div>
 
-          <div className="max-w-4xl mx-auto items-start mt-8">
-            {/* Today's Devotional */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start mt-8">
+            {/* Column 1: Today's Devotional */}
             <div className="bg-white rounded-3xl p-6 sm:p-10 shadow-lg border border-gray-150 relative overflow-hidden transition-all duration-300 hover:shadow-xl">
               {/* Elegant Background Accents */}
               <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-secondary via-primary to-secondary"></div>
@@ -453,6 +454,9 @@ export default function HomeView({ setCurrentTab, language, onNewDonation, onNew
                 </div>
               ) : null}
             </div>
+
+            {/* Column 2: Today's Daily Scripture */}
+            <DailyScripture language={language} />
           </div>
         </div>
       </section>

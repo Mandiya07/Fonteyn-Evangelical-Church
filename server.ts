@@ -767,6 +767,14 @@ app.get('/uploads/:filename', async (req: Request, res: Response) => {
       const data = doc.data() as any;
       const base64Str = data.base64;
       
+      if (!base64Str && data.storagePath) {
+        // If image is too large and was saved to storage only, redirect to public storage URL
+        const bucket = firebaseConfig?.storageBucket;
+        if (bucket) {
+           return res.redirect(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(data.storagePath)}?alt=media`);
+        }
+      }
+      
       const { contentType, buffer } = parseBase64DataUrl(base64Str);
       
       // Save to local disk so it is served statically next time
@@ -1720,14 +1728,7 @@ let notifications: any[] = [];
 app.get('/api/notifications', async (req: Request, res: Response) => {
   try {
     const snapshot = await db.collection('notifications').get();
-    if (snapshot.empty && notifications && notifications.length > 0) {
-      for (const item of notifications) {
-        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        await db.collection('notifications').doc(docId).set(item);
-      }
-      const newSnap = await db.collection('notifications').get();
-      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }
+    
     res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch data' });
@@ -2465,14 +2466,7 @@ export default app;
 app.get('/api/users', async (req: Request, res: Response) => {
   try {
     const snapshot = await db.collection('users').get();
-    if (snapshot.empty && users && users.length > 0) {
-      for (const item of users) {
-        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        await db.collection('users').doc(docId).set(item);
-      }
-      const newSnap = await db.collection('users').get();
-      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }
+    
     res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch data' });
@@ -2513,14 +2507,7 @@ app.delete('/api/users/:id', async (req: Request, res: Response) => {
 app.get('/api/events', async (req: Request, res: Response) => {
   try {
     const snapshot = await db.collection('events').get();
-    if (snapshot.empty && events && events.length > 0) {
-      for (const item of events) {
-        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        await db.collection('events').doc(docId).set(item);
-      }
-      const newSnap = await db.collection('events').get();
-      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }
+    
     res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch data' });
@@ -2561,14 +2548,7 @@ app.delete('/api/events/:id', async (req: Request, res: Response) => {
 app.get('/api/blog', async (req: Request, res: Response) => {
   try {
     const snapshot = await db.collection('blog').get();
-    if (snapshot.empty && blogPosts && blogPosts.length > 0) {
-      for (const item of blogPosts) {
-        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        await db.collection('blog').doc(docId).set(item);
-      }
-      const newSnap = await db.collection('blog').get();
-      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }
+    
     res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch data' });
@@ -2609,14 +2589,7 @@ app.delete('/api/blog/:id', async (req: Request, res: Response) => {
 app.get('/api/donations', async (req: Request, res: Response) => {
   try {
     const snapshot = await db.collection('donations').get();
-    if (snapshot.empty && donations && donations.length > 0) {
-      for (const item of donations) {
-        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        await db.collection('donations').doc(docId).set(item);
-      }
-      const newSnap = await db.collection('donations').get();
-      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }
+    
     res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch data' });
@@ -2657,14 +2630,7 @@ app.delete('/api/donations/:id', async (req: Request, res: Response) => {
 app.get('/api/members', async (req: Request, res: Response) => {
   try {
     const snapshot = await db.collection('members').get();
-    if (snapshot.empty && members && members.length > 0) {
-      for (const item of members) {
-        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        await db.collection('members').doc(docId).set(item);
-      }
-      const newSnap = await db.collection('members').get();
-      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }
+    
     res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch data' });
@@ -2705,14 +2671,7 @@ app.delete('/api/members/:id', async (req: Request, res: Response) => {
 app.get('/api/ministries', async (req: Request, res: Response) => {
   try {
     const snapshot = await db.collection('ministries').get();
-    if (snapshot.empty && ministries && ministries.length > 0) {
-      for (const item of ministries) {
-        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        await db.collection('ministries').doc(docId).set(item);
-      }
-      const newSnap = await db.collection('ministries').get();
-      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }
+    
     res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch data' });
@@ -2753,14 +2712,7 @@ app.delete('/api/ministries/:id', async (req: Request, res: Response) => {
 app.get('/api/v2/branches', async (req: Request, res: Response) => {
   try {
     const snapshot = await db.collection('branches').get();
-    if (snapshot.empty && branches && branches.length > 0) {
-      for (const item of branches) {
-        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        await db.collection('branches').doc(docId).set(item);
-      }
-      const newSnap = await db.collection('branches').get();
-      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }
+    
     res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch data' });
@@ -2801,14 +2753,7 @@ app.delete('/api/v2/branches/:id', async (req: Request, res: Response) => {
 app.get('/api/v2/education/schools', async (req: Request, res: Response) => {
   try {
     const snapshot = await db.collection('schools').get();
-    if (snapshot.empty && schoolInstitutions && schoolInstitutions.length > 0) {
-      for (const item of schoolInstitutions) {
-        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        await db.collection('schools').doc(docId).set(item);
-      }
-      const newSnap = await db.collection('schools').get();
-      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }
+    
     res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch data' });
@@ -2849,14 +2794,7 @@ app.delete('/api/v2/education/schools/:id', async (req: Request, res: Response) 
 app.get('/api/v2/media/radio', async (req: Request, res: Response) => {
   try {
     const snapshot = await db.collection('radio').get();
-    if (snapshot.empty && broadcastStations && broadcastStations.length > 0) {
-      for (const item of broadcastStations) {
-        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        await db.collection('radio').doc(docId).set(item);
-      }
-      const newSnap = await db.collection('radio').get();
-      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }
+    
     res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch data' });
@@ -2897,14 +2835,7 @@ app.delete('/api/v2/media/radio/:id', async (req: Request, res: Response) => {
 app.get('/api/v2/store/products', async (req: Request, res: Response) => {
   try {
     const snapshot = await db.collection('products').get();
-    if (snapshot.empty && bookstoreProducts && bookstoreProducts.length > 0) {
-      for (const item of bookstoreProducts) {
-        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        await db.collection('products').doc(docId).set(item);
-      }
-      const newSnap = await db.collection('products').get();
-      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }
+    
     res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch data' });
@@ -2945,14 +2876,7 @@ app.delete('/api/v2/store/products/:id', async (req: Request, res: Response) => 
 app.get('/api/v2/community/projects', async (req: Request, res: Response) => {
   try {
     const snapshot = await db.collection('projects').get();
-    if (snapshot.empty && communityProjects && communityProjects.length > 0) {
-      for (const item of communityProjects) {
-        const docId = item.id || `auto-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        await db.collection('projects').doc(docId).set(item);
-      }
-      const newSnap = await db.collection('projects').get();
-      return res.json(newSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }
+    
     res.json(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch data' });
