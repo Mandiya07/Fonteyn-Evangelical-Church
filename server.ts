@@ -100,6 +100,40 @@ const storage = firebaseApp ? getStorage(firebaseApp) : null;
 console.log('Firebase Storage SDK initialized:', !!storage);
 let isStorageDisabled = !firebaseConfig?.storageBucket;
 
+
+// Bulletproof local JSON fallback store for offline / serverless / Vercel execution
+const fallbackDbPath = path.join(process.cwd(), 'data', 'fallback_db.json');
+let fallbackStore: Record<string, Record<string, any>> = {};
+try {
+  if (!fs.existsSync(path.dirname(fallbackDbPath))) {
+    fs.mkdirSync(path.dirname(fallbackDbPath), { recursive: true });
+  }
+  if (fs.existsSync(fallbackDbPath)) {
+    fallbackStore = JSON.parse(fs.readFileSync(fallbackDbPath, 'utf8'));
+  }
+} catch (e) {
+  try {
+    const tmpFallbackPath = path.join('/tmp', 'fallback_db.json');
+    if (fs.existsSync(tmpFallbackPath)) {
+      fallbackStore = JSON.parse(fs.readFileSync(tmpFallbackPath, 'utf8'));
+    }
+  } catch (err2) {}
+}
+
+function saveFallbackStore() {
+  try {
+    if (!fs.existsSync(path.dirname(fallbackDbPath))) {
+      fs.mkdirSync(path.dirname(fallbackDbPath), { recursive: true });
+    }
+    fs.writeFileSync(fallbackDbPath, JSON.stringify(fallbackStore, null, 2));
+  } catch (e) {
+    try {
+      const tmpFallbackPath = path.join('/tmp', 'fallback_db.json');
+      fs.writeFileSync(tmpFallbackPath, JSON.stringify(fallbackStore, null, 2));
+    } catch (err2) {}
+  }
+}
+
 const db = {
   collection(collectionName: string) {
     let clientConstraints: QueryConstraint[] = [];
@@ -143,24 +177,43 @@ const db = {
               }))
             };
           } catch (adminErr: any) {
-            console.warn(`Admin query failed for collection ${collectionName}, falling back to Client query:`, adminErr.message);
+            console.warn(`Admin query failed for collection ${collectionName}, trying Client/Fallback:`, adminErr.message);
           }
         }
         
-        if (!clientDb) throw new Error("Firestore client is not initialized.");
-        const colRef = collection(clientDb, collectionName);
-        const q = clientConstraints.length > 0 ? query(colRef, ...clientConstraints) : colRef;
-        const snapshot = await getDocs(q);
+        if (clientDb) {
+          try {
+            const colRef = collection(clientDb, collectionName);
+            const q = clientConstraints.length > 0 ? query(colRef, ...clientConstraints) : colRef;
+            const snapshot = await getDocs(q);
+            return {
+              empty: snapshot.empty,
+              size: snapshot.size,
+              docs: snapshot.docs.map(docSnap => ({
+                id: docSnap.id,
+                ref: docSnap.ref,
+                data() {
+                  return docSnap.data();
+                }
+              }))
+            };
+          } catch (clientErr: any) {
+            console.warn(`Client query failed for collection ${collectionName}, falling back to local JSON store:`, clientErr.message);
+          }
+        }
+
+        // Fallback store
+        const itemsObj = fallbackStore[collectionName] || {};
+        const docs = Object.entries(itemsObj).map(([id, data]) => ({
+          id,
+          data() {
+            return data;
+          }
+        }));
         return {
-          empty: snapshot.empty,
-          size: snapshot.size,
-          docs: snapshot.docs.map(docSnap => ({
-            id: docSnap.id,
-            ref: docSnap.ref,
-            data() {
-              return docSnap.data();
-            }
-          }))
+          empty: docs.length === 0,
+          size: docs.length,
+          docs
         };
       },
       async add(data: any) {
@@ -172,16 +225,33 @@ const db = {
               ref: docRef
             };
           } catch (adminErr: any) {
-            console.warn(`Admin add failed for collection ${collectionName}, falling back to Client:`, adminErr.message);
+            console.warn(`Admin add failed for collection ${collectionName}, trying Client/Fallback:`, adminErr.message);
           }
         }
         
-        if (!clientDb) throw new Error("Firestore client is not initialized.");
-        const colRef = collection(clientDb, collectionName);
-        const docRef = await addDoc(colRef, data);
+        if (clientDb) {
+          try {
+            const colRef = collection(clientDb, collectionName);
+            const docRef = await addDoc(colRef, data);
+            return {
+              id: docRef.id,
+              ref: docRef
+            };
+          } catch (clientErr: any) {
+            console.warn(`Client add failed for collection ${collectionName}, falling back to local JSON store:`, clientErr.message);
+          }
+        }
+
+        // Fallback store add
+        const newId = `fallback-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+        if (!fallbackStore[collectionName]) {
+          fallbackStore[collectionName] = {};
+        }
+        fallbackStore[collectionName][newId] = data;
+        saveFallbackStore();
         return {
-          id: docRef.id,
-          ref: docRef
+          id: newId,
+          ref: { id: newId }
         };
       },
       doc(docId?: string) {
@@ -200,17 +270,31 @@ const db = {
                   }
                 };
               } catch (adminErr: any) {
-                console.warn(`Admin get document failed for ${collectionName}/${docId}, falling back to Client:`, adminErr.message);
+                console.warn(`Admin get failed for ${collectionName}/${generatedId}:`, adminErr.message);
               }
             }
             
-            if (!clientDb) throw new Error("Firestore client is not initialized.");
-            const docRef = doc(clientDb, collectionName, docId);
-            const docSnap = await getDoc(docRef);
+            if (clientDb) {
+              try {
+                const docRef = doc(clientDb, collectionName, generatedId);
+                const docSnap = await getDoc(docRef);
+                return {
+                  exists: docSnap.exists(),
+                  data() {
+                    return docSnap.data();
+                  }
+                };
+              } catch (clientErr: any) {
+                console.warn(`Client get failed for ${collectionName}/${generatedId}:`, clientErr.message);
+              }
+            }
+
+            // Fallback store get
+            const data = fallbackStore[collectionName]?.[generatedId];
             return {
-              exists: docSnap.exists(),
+              exists: !!data,
               data() {
-                return docSnap.data();
+                return data;
               }
             };
           },
@@ -218,58 +302,106 @@ const db = {
             if (adminDb) {
               try {
                 if (options && typeof options.merge === 'boolean') {
-                  await adminDb.collection(collectionName).doc(docId).set(data, { merge: options.merge });
+                  await adminDb.collection(collectionName).doc(generatedId).set(data, { merge: options.merge });
                 } else {
-                  await adminDb.collection(collectionName).doc(docId).set(data);
+                  await adminDb.collection(collectionName).doc(generatedId).set(data);
                 }
                 return;
               } catch (adminErr: any) {
-                console.warn(`Admin set document failed for ${collectionName}/${docId}, falling back to Client:`, adminErr.message);
+                console.warn(`Admin set failed for ${collectionName}/${generatedId}:`, adminErr.message);
               }
             }
             
-            if (!clientDb) throw new Error("Firestore client is not initialized.");
-            const docRef = doc(clientDb, collectionName, docId);
-            if (options && typeof options.merge === 'boolean') {
-              await setDoc(docRef, data, { merge: options.merge });
-            } else {
-              await setDoc(docRef, data);
+            if (clientDb) {
+              try {
+                const docRef = doc(clientDb, collectionName, generatedId);
+                if (options && typeof options.merge === 'boolean') {
+                  await setDoc(docRef, data, { merge: options.merge });
+                } else {
+                  await setDoc(docRef, data);
+                }
+                return;
+              } catch (clientErr: any) {
+                console.warn(`Client set failed for ${collectionName}/${generatedId}:`, clientErr.message);
+              }
             }
+
+            // Fallback store set
+            if (!fallbackStore[collectionName]) {
+              fallbackStore[collectionName] = {};
+            }
+            if (options?.merge && fallbackStore[collectionName][generatedId]) {
+              fallbackStore[collectionName][generatedId] = {
+                ...fallbackStore[collectionName][generatedId],
+                ...data
+              };
+            } else {
+              fallbackStore[collectionName][generatedId] = data;
+            }
+            saveFallbackStore();
           },
           async update(data: any) {
             if (adminDb) {
               try {
-                await adminDb.collection(collectionName).doc(docId).update(data);
+                await adminDb.collection(collectionName).doc(generatedId).update(data);
                 return;
               } catch (adminErr: any) {
-                console.warn(`Admin update document failed for ${collectionName}/${docId}, falling back to Client:`, adminErr.message);
+                console.warn(`Admin update failed for ${collectionName}/${generatedId}:`, adminErr.message);
               }
             }
             
-            if (!clientDb) throw new Error("Firestore client is not initialized.");
-            const docRef = doc(clientDb, collectionName, docId);
-            await updateDoc(docRef, data);
+            if (clientDb) {
+              try {
+                const docRef = doc(clientDb, collectionName, generatedId);
+                await updateDoc(docRef, data);
+                return;
+              } catch (clientErr: any) {
+                console.warn(`Client update failed for ${collectionName}/${generatedId}:`, clientErr.message);
+              }
+            }
+
+            // Fallback store update
+            if (!fallbackStore[collectionName]) {
+              fallbackStore[collectionName] = {};
+            }
+            fallbackStore[collectionName][generatedId] = {
+              ...(fallbackStore[collectionName][generatedId] || {}),
+              ...data
+            };
+            saveFallbackStore();
           },
           async delete() {
             if (adminDb) {
               try {
-                await adminDb.collection(collectionName).doc(docId).delete();
+                await adminDb.collection(collectionName).doc(generatedId).delete();
                 return;
               } catch (adminErr: any) {
-                console.warn(`Admin delete document failed for ${collectionName}/${docId}, falling back to Client:`, adminErr.message);
+                console.warn(`Admin delete failed for ${collectionName}/${generatedId}:`, adminErr.message);
               }
             }
             
-            if (!clientDb) throw new Error("Firestore client is not initialized.");
-            const docRef = doc(clientDb, collectionName, docId);
-            await deleteDoc(docRef);
+            if (clientDb) {
+              try {
+                const docRef = doc(clientDb, collectionName, generatedId);
+                await deleteDoc(docRef);
+                return;
+              } catch (clientErr: any) {
+                console.warn(`Client delete failed for ${collectionName}/${generatedId}:`, clientErr.message);
+              }
+            }
+
+            // Fallback store delete
+            if (fallbackStore[collectionName]) {
+              delete fallbackStore[collectionName][generatedId];
+              saveFallbackStore();
+            }
           }
         };
       }
     };
     return wrapper;
   }
-};
+};;
 
 enum OperationType {
   CREATE = 'create',
@@ -796,10 +928,10 @@ app.get('/uploads/:filename', async (req: Request, res: Response) => {
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       return res.send(buffer);
     }
-    res.status(404).send('Not found');
+    return res.status(404).json({ error: 'Not found' });
   } catch (err) {
     console.error('Failed to restore upload file from Firestore:', err);
-    res.status(500).send('Server Error');
+    return res.status(500).json({ error: 'Server Error' });
   }
 });
 
@@ -1263,10 +1395,10 @@ app.get('/api/assets/:id', async (req: Request, res: Response) => {
     } catch (fsCheckErr) {
       console.warn('Firestore asset check failed:', fsCheckErr);
     }
-    return res.status(404).send('Asset not found');
+    return res.status(404).json({ error: 'Asset not found' });
   } catch (err) {
     console.error('File fetch error:', err);
-    res.status(500).send('Server Error');
+    return res.status(500).json({ error: 'Server Error' });
   }
 });
 
