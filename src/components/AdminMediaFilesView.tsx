@@ -45,14 +45,72 @@ export default function AdminMediaFilesView() {
     fetchAssets();
   }, []);
 
+  // Compress images on the client side to bypass Vercel's 4.5MB request limit
+  const compressImage = (file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.8): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      if (file.type === 'image/svg+xml') {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(event.target?.result as string);
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+          resolve(compressedBase64);
+        };
+        img.onerror = (err) => reject(err);
+      };
+      reader.onerror = (err) => reject(err);
+    });
+  };
+
   // Handle generic file upload
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate size limit (e.g., 50MB max)
+    const isImage = file.type.startsWith('image/');
+
+    // Validate size limit based on Vercel serverless request limits
+    if (!isImage && file.size > 4 * 1024 * 1024) {
+      setErrorMessage("Non-image files (like audio or documents) must be under 4MB for serverless deployment limits. For larger sermon audio, please link them externally (e.g. YouTube or Google Drive) or use smaller files.");
+      return;
+    }
+
     if (file.size > 50 * 1024 * 1024) {
-      setErrorMessage("File exceeds 50MB limit.");
+      setErrorMessage("File exceeds the maximum 50MB limit.");
       return;
     }
 
@@ -60,45 +118,44 @@ export default function AdminMediaFilesView() {
     setErrorMessage(null);
 
     try {
-      // Read file to base64
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64Content = reader.result as string;
-        try {
-          const res = await fetch('/api/images/upload', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: file.name,
-              base64: base64Content
-            })
-          });
+      let base64Content = "";
+      if (isImage) {
+        console.log(`Compressing image "${file.name}" on client side...`);
+        base64Content = await compressImage(file);
+      } else {
+        // Read non-image file as raw base64
+        base64Content = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error("Failed to read file"));
+          reader.readAsDataURL(file);
+        });
+      }
 
-          if (res.ok) {
-            const data = await res.json();
-            if (data.success) {
-              await fetchAssets();
-            } else {
-              setErrorMessage(data.error || "Failed to upload file.");
-            }
-          } else {
-            setErrorMessage("Server rejected file upload.");
-          }
-        } catch (err) {
-          console.error(err);
-          setErrorMessage("Failed to send file data to server.");
-        } finally {
-          setIsUploading(false);
+      console.log(`Uploading ${file.name} (payload size: ${Math.round(base64Content.length / 1024)} KB)...`);
+      const res = await fetch('/api/images/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: file.name,
+          base64: base64Content
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          await fetchAssets();
+        } else {
+          setErrorMessage(data.error || "Failed to upload file.");
         }
-      };
-      reader.onerror = () => {
-        setErrorMessage("Failed to read file.");
-        setIsUploading(false);
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
+      } else {
+        setErrorMessage("Server rejected file upload. It might be too large for the platform's limits.");
+      }
+    } catch (err: any) {
       console.error(err);
-      setErrorMessage("An unexpected error occurred during upload.");
+      setErrorMessage(err.message || "Failed to upload file. Please try again.");
+    } finally {
       setIsUploading(false);
     }
   };

@@ -28,7 +28,18 @@ import {
   QueryConstraint,
   where
 } from 'firebase/firestore';
-import firebaseConfig from './firebase-applet-config.json';
+// Load firebase config from JSON file safely under ES Modules
+let firebaseConfig: any = {};
+try {
+  const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
+  if (fs.existsSync(configPath)) {
+    firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  } else {
+    console.warn('firebase-applet-config.json not found at', configPath);
+  }
+} catch (err: any) {
+  console.error('Failed to read firebase-applet-config.json:', err.message);
+}
 import admin from 'firebase-admin';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { getStorage as getAdminStorage } from 'firebase-admin/storage';
@@ -70,15 +81,23 @@ try {
   console.warn('Firebase Admin SDK failed to initialize. Falling back to Client SDK:', adminErr.message);
 }
 
-// Initialize Client Firebase App
-const firebaseApp = firebaseConfig?.apiKey ? initializeApp({
-  apiKey: firebaseConfig.apiKey,
-  authDomain: firebaseConfig.authDomain,
-  projectId: firebaseConfig.projectId,
-  storageBucket: firebaseConfig.storageBucket,
-  messagingSenderId: firebaseConfig.messagingSenderId,
-  appId: firebaseConfig.appId,
-}) : null;
+// Initialize Client Firebase App safely
+let firebaseApp: any = null;
+try {
+  if (firebaseConfig?.apiKey) {
+    firebaseApp = initializeApp({
+      apiKey: firebaseConfig.apiKey,
+      authDomain: firebaseConfig.authDomain,
+      projectId: firebaseConfig.projectId,
+      storageBucket: firebaseConfig.storageBucket,
+      messagingSenderId: firebaseConfig.messagingSenderId,
+      appId: firebaseConfig.appId,
+    });
+    console.log('Firebase Client App initialized successfully');
+  }
+} catch (err: any) {
+  console.warn('Firebase Client App failed to initialize:', err.message);
+}
 
 let clientDb: any = null;
 if (firebaseApp) {
@@ -88,17 +107,68 @@ if (firebaseApp) {
   } catch (err) {
     try {
       clientDb = getFirestore(firebaseApp);
-    } catch (e2) {
-      console.warn("Failed to get Firestore client:", e2);
+    } catch (e2: any) {
+      console.warn("Failed to get Firestore client:", e2.message);
     }
   }
 }
 
 console.log('Firebase Client SDK initialized:', !!clientDb);
 
-const storage = firebaseApp ? getStorage(firebaseApp) : null;
+let storage: any = null;
+try {
+  if (firebaseApp) {
+    storage = getStorage(firebaseApp);
+  }
+} catch (err: any) {
+  console.warn('Firebase Client Storage failed to initialize:', err.message);
+}
+
 console.log('Firebase Storage SDK initialized:', !!storage);
 let isStorageDisabled = !firebaseConfig?.storageBucket;
+
+// Verify Firestore credentials and connection to prevent continuous background RPC error loops
+async function verifyFirestoreConnectivity() {
+  if (adminDb) {
+    try {
+      // Test permissions with a basic read
+      await adminDb.collection('settings').doc('app-images').get();
+      console.log('✓ Firebase Admin SDK connection verified successfully.');
+    } catch (err: any) {
+      const msg = err.message || '';
+      if (msg.includes('PERMISSION_DENIED') || msg.includes('Permission denied') || msg.includes('7')) {
+        console.warn('⚠️ Firebase Admin SDK has insufficient permissions for the project. Disabling Admin SDK to use local Fallback.');
+        adminDb = null;
+        adminStorage = null;
+      } else {
+        console.warn('Firebase Admin SDK connection test warning:', msg);
+      }
+    }
+  }
+
+  if (clientDb) {
+    try {
+      // Test client permissions with a basic read
+      const testRef = doc(clientDb, 'settings', 'app-images');
+      await getDoc(testRef);
+      console.log('✓ Firebase Client SDK connection verified successfully.');
+    } catch (err: any) {
+      const msg = err.message || '';
+      if (msg.includes('PERMISSION_DENIED') || msg.includes('Permission denied') || msg.includes('offline') || msg.includes('7')) {
+        console.warn('⚠️ Firebase Client SDK has insufficient permissions or is offline. Disabling Client SDK to use local Fallback database.');
+        clientDb = null;
+        storage = null;
+      } else {
+        console.warn('Firebase Client SDK connection test warning:', msg);
+      }
+    }
+  }
+}
+
+// Run connectivity check
+verifyFirestoreConnectivity().catch(err => {
+  console.error('Error verifying Firestore connectivity:', err);
+});
 
 
 // Bulletproof local JSON fallback store for offline / serverless / Vercel execution
@@ -2622,20 +2692,6 @@ async function backupLocalImagesToFirestore() {
 
 // Configure Vite or Static Serve
 async function startServer() {
-  // Load persistent configurations from Firestore on startup
-  try {
-    await loadPersistentConfig();
-  } catch (e) {
-    console.warn('Load persistent config error:', e);
-  }
-
-  // Run the automatic backup task
-  try {
-    await backupLocalImagesToFirestore();
-  } catch (backupErr) {
-    console.error('Error running backupLocalImagesToFirestore:', backupErr);
-  }
-
   if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
     try {
       const vite = await createViteServer({
@@ -2657,17 +2713,42 @@ async function startServer() {
     }
   }
 
-  try {
-    await seedDatabaseIfEmpty();
-  } catch (e) {
-    console.warn('Seed database warning:', e);
-  }
+  const runStartupTasks = async () => {
+    // Load persistent configurations from Firestore on startup
+    try {
+      await loadPersistentConfig();
+    } catch (e) {
+      console.warn('Load persistent config error:', e);
+    }
+
+    // Run the automatic backup task
+    try {
+      await backupLocalImagesToFirestore();
+    } catch (backupErr) {
+      console.error('Error running backupLocalImagesToFirestore:', backupErr);
+    }
+
+    try {
+      await seedDatabaseIfEmpty();
+    } catch (e) {
+      console.warn('Seed database warning:', e);
+    }
+  };
 
   // Only call app.listen if NOT on Vercel serverless
   if (!process.env.VERCEL) {
     const PORT = 3000;
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`Fonteyn Evangelical Church Server running on http://0.0.0.0:${PORT}`);
+      // Run startup database/backup tasks in the background so that server listening is instant and non-blocking
+      runStartupTasks().catch(err => {
+        console.error('Error running startup background tasks:', err);
+      });
+    });
+  } else {
+    // In Vercel serverless environment, kick off the background tasks immediately
+    runStartupTasks().catch(err => {
+      console.error('Error running startup background tasks on Vercel:', err);
     });
   }
 }
